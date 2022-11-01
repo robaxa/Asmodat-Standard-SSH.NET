@@ -1,64 +1,32 @@
-﻿namespace Renci.SshNet.Messages.Authentication
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Authentication.PublicKeyMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Messages.Authentication
 {
-    /// <summary>
-    /// Represents SSH_MSG_USERAUTH_PK_OK message.
-    /// </summary>
-    [Message("SSH_MSG_USERAUTH_PK_OK", 60)]
-    internal class PublicKeyMessage : Message
+  [Message("SSH_MSG_USERAUTH_PK_OK", 60)]
+  internal class PublicKeyMessage : Message
+  {
+    public byte[] PublicKeyAlgorithmName { get; private set; }
+
+    public byte[] PublicKeyData { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this.PublicKeyAlgorithmName.Length + 4 + this.PublicKeyData.Length;
+
+    internal override void Process(Session session) => session.OnUserAuthenticationPublicKeyReceived(this);
+
+    protected override void LoadData()
     {
-        /// <summary>
-        /// Gets the name of the public key algorithm as ASCII encoded byte array.
-        /// </summary>
-        /// <value>
-        /// The name of the public key algorithm.
-        /// </value>
-        public byte[] PublicKeyAlgorithmName { get; private set; }
-
-        /// <summary>
-        /// Gets the public key data.
-        /// </summary>
-        public byte[] PublicKeyData { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // PublicKeyAlgorithmName length
-                capacity += PublicKeyAlgorithmName.Length; // PublicKeyAlgorithmName
-                capacity += 4; // PublicKeyData length
-                capacity += PublicKeyData.Length; // PublicKeyData
-                return capacity;
-            }
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnUserAuthenticationPublicKeyReceived(this);
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            PublicKeyAlgorithmName = ReadBinary();
-            PublicKeyData = ReadBinary();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            WriteBinaryString(PublicKeyAlgorithmName);
-            WriteBinaryString(PublicKeyData);
-        }
+      this.PublicKeyAlgorithmName = this.ReadBinary();
+      this.PublicKeyData = this.ReadBinary();
     }
+
+    protected override void SaveData()
+    {
+      this.WriteBinaryString(this.PublicKeyAlgorithmName);
+      this.WriteBinaryString(this.PublicKeyData);
+    }
+  }
 }

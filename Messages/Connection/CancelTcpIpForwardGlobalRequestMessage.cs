@@ -1,66 +1,42 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Connection.CancelTcpIpForwardGlobalRequestMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
+using System;
 
 namespace Renci.SshNet.Messages.Connection
 {
-    internal class CancelTcpIpForwardGlobalRequestMessage : GlobalRequestMessage
+  internal class CancelTcpIpForwardGlobalRequestMessage : GlobalRequestMessage
+  {
+    private byte[] _addressToBind;
+
+    public CancelTcpIpForwardGlobalRequestMessage(string addressToBind, uint portToBind)
+      : base(SshData.Ascii.GetBytes("cancel-tcpip-forward"), true)
     {
-        private byte[] _addressToBind;
-
-        public CancelTcpIpForwardGlobalRequestMessage(string addressToBind, uint portToBind)
-            : base(Ascii.GetBytes("cancel-tcpip-forward"), true)
-        {
-            AddressToBind = addressToBind;
-            PortToBind = portToBind;
-        }
-
-        /// <summary>
-        /// Gets the address to bind to.
-        /// </summary>
-        public string AddressToBind
-        {
-            get { return Utf8.GetString(_addressToBind, 0, _addressToBind.Length); }
-            private set { _addressToBind = Utf8.GetBytes(value); }
-        }
-
-        /// <summary>
-        /// Gets port number to bind to.
-        /// </summary>
-        public uint PortToBind { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // AddressToBind length
-                capacity += _addressToBind.Length; // AddressToBind
-                capacity += 4; // PortToBind
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            base.SaveData();
-            WriteBinaryString(_addressToBind);
-            Write(PortToBind);
-        }
+      this.AddressToBind = addressToBind;
+      this.PortToBind = portToBind;
     }
+
+    public string AddressToBind
+    {
+      get => SshData.Utf8.GetString(this._addressToBind, 0, this._addressToBind.Length);
+      private set => this._addressToBind = SshData.Utf8.GetBytes(value);
+    }
+
+    public uint PortToBind { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this._addressToBind.Length + 4;
+
+    protected override void LoadData() => throw new NotImplementedException();
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.WriteBinaryString(this._addressToBind);
+      this.Write(this.PortToBind);
+    }
+  }
 }

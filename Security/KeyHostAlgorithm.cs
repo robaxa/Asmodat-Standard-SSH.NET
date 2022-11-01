@@ -1,229 +1,144 @@
-﻿using System.Collections.Generic;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.KeyHostAlgorithm
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using System.Collections.Generic;
 
 namespace Renci.SshNet.Security
 {
-    /// <summary>
-    /// Implements key support for host algorithm.
-    /// </summary>
-    public class KeyHostAlgorithm : HostAlgorithm
+  public class KeyHostAlgorithm : HostAlgorithm
+  {
+    public Key Key { get; private set; }
+
+    public override byte[] Data => new KeyHostAlgorithm.SshKeyData(this.Name, this.Key.Public).GetBytes();
+
+    public KeyHostAlgorithm(string name, Key key)
+      : base(name)
     {
-        /// <summary>
-        /// Gets the key.
-        /// </summary>
-        public Key Key { get; private set; }
-
-        /// <summary>
-        /// Gets the public key data.
-        /// </summary>
-        public override byte[] Data
-        {
-            get
-            {
-                return new SshKeyData(Name, Key.Public).GetBytes();
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="KeyHostAlgorithm"/> class.
-        /// </summary>
-        /// <param name="name">Host key name.</param>
-        /// <param name="key">Host key.</param>
-        public KeyHostAlgorithm(string name, Key key)
-            : base(name)
-        {
-            Key = key;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="HostAlgorithm"/> class.
-        /// </summary>
-        /// <param name="name">Host key name.</param>
-        /// <param name="key">Host key.</param>
-        /// <param name="data">Host key encoded data.</param>
-        public KeyHostAlgorithm(string name, Key key, byte[] data)
-            : base(name)
-        {
-            Key = key;
-
-            var sshKey = new SshKeyData();
-            sshKey.Load(data);
-            Key.Public = sshKey.Keys;
-        }
-
-        /// <summary>
-        /// Signs the specified data.
-        /// </summary>
-        /// <param name="data">The data.</param>
-        /// <returns>
-        /// Signed data.
-        /// </returns>
-        public override byte[] Sign(byte[] data)
-        {
-            return new SignatureKeyData(Name, Key.Sign(data)).GetBytes();
-        }
-
-        /// <summary>
-        /// Verifies the signature.
-        /// </summary>
-        /// <param name="data">The data.</param>
-        /// <param name="signature">The signature.</param>
-        /// <returns>
-        ///   <c>True</c> is signature was successfully verifies; otherwise <c>false</c>.
-        /// </returns>
-        public override bool VerifySignature(byte[] data, byte[] signature)
-        {
-            var signatureData = new SignatureKeyData();
-            signatureData.Load(signature);
-
-            return Key.VerifySignature(data, signatureData.Signature);
-        }
-
-        private class SshKeyData : SshData
-        {
-            private byte[] _name;
-            private IList<byte[]> _keys;
-
-            public BigInteger[] Keys
-            {
-                get
-                {
-                    var keys = new BigInteger[_keys.Count];
-                    for (var i = 0; i < _keys.Count; i++)
-                    {
-                        var key = _keys[i];
-                        keys[i] = key.ToBigInteger();
-                    }
-                    return keys;
-                }
-                private set
-                {
-                    _keys = new List<byte[]>(value.Length);
-                    foreach (var key in value)
-                    {
-                        _keys.Add(key.ToByteArray().Reverse());
-                    }
-                }
-            }
-
-            private string Name
-            {
-                get { return Utf8.GetString(_name, 0, _name.Length); }
-                set { _name = Utf8.GetBytes(value); }
-            }
-
-            protected override int BufferCapacity
-            {
-                get
-                {
-                    var capacity = base.BufferCapacity;
-                    capacity += 4; // Name length
-                    capacity += _name.Length; // Name
-                    foreach (var key in _keys)
-                    {
-                        capacity += 4; // Key length
-                        capacity += key.Length; // Key
-                    }
-                    return capacity;
-                }
-            }
-
-            public SshKeyData()
-            {
-            }
-
-            public SshKeyData(string name, params BigInteger[] keys)
-            {
-                Name = name;
-                Keys = keys;
-            }
-
-            protected override void LoadData()
-            {
-                _name = ReadBinary();
-                _keys = new List<byte[]>();
-
-                while (!IsEndOfData)
-                {
-                    _keys.Add(ReadBinary());
-                }
-            }
-
-            protected override void SaveData()
-            {
-                WriteBinaryString(_name);
-
-                foreach (var key in _keys)
-                {
-                    WriteBinaryString(key);
-                }
-            }
-        }
-
-        private class SignatureKeyData : SshData
-        {
-            /// <summary>
-            /// Gets or sets the name of the algorithm as UTF-8 encoded byte array.
-            /// </summary>
-            /// <value>
-            /// The name of the algorithm.
-            /// </value>
-            private byte[] AlgorithmName { get; set; }
-
-            /// <summary>
-            /// Gets or sets the signature.
-            /// </summary>
-            /// <value>
-            /// The signature.
-            /// </value>
-            public byte[] Signature { get; private set; }
-
-            /// <summary>
-            /// Gets the size of the message in bytes.
-            /// </summary>
-            /// <value>
-            /// The size of the messages in bytes.
-            /// </value>
-            protected override int BufferCapacity
-            {
-                get
-                {
-                    var capacity = base.BufferCapacity;
-                    capacity += 4; // AlgorithmName length
-                    capacity += AlgorithmName.Length; // AlgorithmName
-                    capacity += 4; // Signature length
-                    capacity += Signature.Length; // Signature
-                    return capacity;
-                }
-            }
-
-            public SignatureKeyData()
-            {
-            }
-
-            public SignatureKeyData(string name, byte[] signature)
-            {
-                AlgorithmName = Utf8.GetBytes(name);
-                Signature = signature;
-            }
-
-            /// <summary>
-            /// Called when type specific data need to be loaded.
-            /// </summary>
-            protected override void LoadData()
-            {
-                AlgorithmName = ReadBinary();
-                Signature = ReadBinary();
-            }
-
-            /// <summary>
-            /// Called when type specific data need to be saved.
-            /// </summary>
-            protected override void SaveData()
-            {
-                WriteBinaryString(AlgorithmName);
-                WriteBinaryString(Signature);
-            }
-        }
+      this.Key = key;
     }
+
+    public KeyHostAlgorithm(string name, Key key, byte[] data)
+      : base(name)
+    {
+      this.Key = key;
+      KeyHostAlgorithm.SshKeyData sshKeyData = new KeyHostAlgorithm.SshKeyData();
+      sshKeyData.Load(data);
+      this.Key.Public = sshKeyData.Keys;
+    }
+
+    public override byte[] Sign(byte[] data) => new KeyHostAlgorithm.SignatureKeyData(this.Name, this.Key.Sign(data)).GetBytes();
+
+    public override bool VerifySignature(byte[] data, byte[] signature)
+    {
+      KeyHostAlgorithm.SignatureKeyData signatureKeyData = new KeyHostAlgorithm.SignatureKeyData();
+      signatureKeyData.Load(signature);
+      return this.Key.VerifySignature(data, signatureKeyData.Signature);
+    }
+
+    private class SshKeyData : SshData
+    {
+      private byte[] _name;
+      private IList<byte[]> _keys;
+
+      public BigInteger[] Keys
+      {
+        get
+        {
+          BigInteger[] keys = new BigInteger[this._keys.Count];
+          for (int index = 0; index < this._keys.Count; ++index)
+          {
+            byte[] key = this._keys[index];
+            keys[index] = key.ToBigInteger();
+          }
+          return keys;
+        }
+        private set
+        {
+          this._keys = (IList<byte[]>) new List<byte[]>(value.Length);
+          foreach (BigInteger bigInteger in value)
+            this._keys.Add(bigInteger.ToByteArray().Reverse<byte>());
+        }
+      }
+
+      private string Name
+      {
+        get => SshData.Utf8.GetString(this._name, 0, this._name.Length);
+        set => this._name = SshData.Utf8.GetBytes(value);
+      }
+
+      protected override int BufferCapacity
+      {
+        get
+        {
+          int bufferCapacity = base.BufferCapacity + 4 + this._name.Length;
+          foreach (byte[] key in (IEnumerable<byte[]>) this._keys)
+          {
+            bufferCapacity += 4;
+            bufferCapacity += key.Length;
+          }
+          return bufferCapacity;
+        }
+      }
+
+      public SshKeyData()
+      {
+      }
+
+      public SshKeyData(string name, params BigInteger[] keys)
+      {
+        this.Name = name;
+        this.Keys = keys;
+      }
+
+      protected override void LoadData()
+      {
+        this._name = this.ReadBinary();
+        this._keys = (IList<byte[]>) new List<byte[]>();
+        while (!this.IsEndOfData)
+          this._keys.Add(this.ReadBinary());
+      }
+
+      protected override void SaveData()
+      {
+        this.WriteBinaryString(this._name);
+        foreach (byte[] key in (IEnumerable<byte[]>) this._keys)
+          this.WriteBinaryString(key);
+      }
+    }
+
+    private class SignatureKeyData : SshData
+    {
+      private byte[] AlgorithmName { get; set; }
+
+      public byte[] Signature { get; private set; }
+
+      protected override int BufferCapacity => base.BufferCapacity + 4 + this.AlgorithmName.Length + 4 + this.Signature.Length;
+
+      public SignatureKeyData()
+      {
+      }
+
+      public SignatureKeyData(string name, byte[] signature)
+      {
+        this.AlgorithmName = SshData.Utf8.GetBytes(name);
+        this.Signature = signature;
+      }
+
+      protected override void LoadData()
+      {
+        this.AlgorithmName = this.ReadBinary();
+        this.Signature = this.ReadBinary();
+      }
+
+      protected override void SaveData()
+      {
+        this.WriteBinaryString(this.AlgorithmName);
+        this.WriteBinaryString(this.Signature);
+      }
+    }
+  }
 }

@@ -1,46 +1,25 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Sftp.SftpDownloadAsyncResult
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using System;
 
 namespace Renci.SshNet.Sftp
 {
-    /// <summary>
-    /// Encapsulates the results of an asynchronous download operation.
-    /// </summary>
-    public class SftpDownloadAsyncResult :  AsyncResult
+  public class SftpDownloadAsyncResult : AsyncResult
+  {
+    public bool IsDownloadCanceled { get; set; }
+
+    public ulong DownloadedBytes { get; private set; }
+
+    public SftpDownloadAsyncResult(AsyncCallback asyncCallback, object state)
+      : base(asyncCallback, state)
     {
-        /// <summary>
-        /// Gets or sets a value indicating whether to cancel asynchronous download operation.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if download operation to be canceled; otherwise, <c>false</c>.
-        /// </value>
-        /// <remarks>
-        /// Download operation will be canceled after finishing uploading current buffer.
-        /// </remarks>
-        public bool IsDownloadCanceled { get; set; }
-
-        /// <summary>
-        /// Gets the number of downloaded bytes.
-        /// </summary>
-        public ulong DownloadedBytes { get; private set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SftpDownloadAsyncResult"/> class.
-        /// </summary>
-        /// <param name="asyncCallback">The async callback.</param>
-        /// <param name="state">The state.</param>
-        public SftpDownloadAsyncResult(AsyncCallback asyncCallback, object state)
-            : base(asyncCallback, state)
-        {
-        }
-
-        /// <summary>
-        /// Updates asynchronous operation status information.
-        /// </summary>
-        /// <param name="downloadedBytes">Number of downloaded bytes.</param>
-        internal void Update(ulong downloadedBytes)
-        {
-            DownloadedBytes = downloadedBytes;
-        }
     }
+
+    internal void Update(ulong downloadedBytes) => this.DownloadedBytes = downloadedBytes;
+  }
 }

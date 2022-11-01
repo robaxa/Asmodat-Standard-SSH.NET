@@ -1,311 +1,174 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.Extensions
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Abstractions;
+using Renci.SshNet.Messages;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.Net;
 using System.Net.Sockets;
 using System.Text;
-#if !FEATURE_WAITHANDLE_DISPOSE
-using System.Threading;
-#endif // !FEATURE_WAITHANDLE_DISPOSE
-using Renci.SshNet.Abstractions;
-using Renci.SshNet.Messages;
 
 namespace Renci.SshNet.Common
 {
-    /// <summary>
-    /// Collection of different extension method
-    /// </summary>
-    internal static partial class Extensions
+  internal static class Extensions
+  {
+    public static bool IsNullOrWhiteSpace(this string value)
     {
-        /// <summary>
-        /// Determines whether the specified value is null or white space.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <returns>
-        /// <c>true</c> if <paramref name="value"/> is null or white space; otherwise, <c>false</c>.
-        /// </returns>
-        public static bool IsNullOrWhiteSpace(this string value)
-        {
-            if (string.IsNullOrEmpty(value)) return true;
-
-            for (var i = 0; i < value.Length; i++)
-            {
-                if (!char.IsWhiteSpace(value[i]))
-                    return false;
-            }
-
-            return true;
-        }
-
-        internal static byte[] ToArray(this ServiceName serviceName)
-        {
-            switch (serviceName)
-            {
-                case ServiceName.UserAuthentication:
-                    return SshData.Ascii.GetBytes("ssh-userauth");
-                case ServiceName.Connection:
-                    return SshData.Ascii.GetBytes("ssh-connection");
-                default:
-                    throw new NotSupportedException(string.Format("Service name '{0}' is not supported.", serviceName));
-            }
-        }
-
-        internal static ServiceName ToServiceName(this byte[] data)
-        {
-            var sshServiceName = SshData.Ascii.GetString(data, 0, data.Length);
-            switch (sshServiceName)
-            {
-                case "ssh-userauth":
-                    return ServiceName.UserAuthentication;
-                case "ssh-connection":
-                    return ServiceName.Connection;
-                default:
-                    throw new NotSupportedException(string.Format("Service name '{0}' is not supported.", sshServiceName));
-            }
-        }
-
-        internal static BigInteger ToBigInteger(this byte[] data)
-        {
-            var reversed = new byte[data.Length];
-            Buffer.BlockCopy(data, 0, reversed, 0, data.Length);
-            return new BigInteger(reversed.Reverse());
-        }
-
-        /// <summary>
-        /// Reverses the sequence of the elements in the entire one-dimensional <see cref="Array"/>.
-        /// </summary>
-        /// <param name="array">The one-dimensional <see cref="Array"/> to reverse.</param>
-        /// <returns>
-        /// The <see cref="Array"/> with its elements reversed.
-        /// </returns>
-        internal static T[] Reverse<T>(this T[] array)
-        {
-            Array.Reverse(array);
-            return array;
-        }
-
-        /// <summary>
-        /// Prints out 
-        /// </summary>
-        /// <param name="bytes">The bytes.</param>
-        internal static void DebugPrint(this IEnumerable<byte> bytes)
-        {
-            var sb = new StringBuilder();
-
-            foreach (var b in bytes)
-            {
-                sb.AppendFormat(CultureInfo.CurrentCulture, "0x{0:x2}, ", b);
-            }
-            Debug.WriteLine(sb.ToString());
-        }
-
-        /// <summary>
-        /// Creates an instance of the specified type using that type's default constructor.
-        /// </summary>
-        /// <typeparam name="T">The type to create.</typeparam>
-        /// <param name="type">Type of the instance to create.</param>
-        /// <returns>A reference to the newly created object.</returns>
-        internal static T CreateInstance<T>(this Type type) where T : class
-        {
-            if (type == null)
-                return null;
-            return Activator.CreateInstance(type) as T;
-        }
-
-        internal static void ValidatePort(this uint value, string argument)
-        {
-            if (value > IPEndPoint.MaxPort)
-                throw new ArgumentOutOfRangeException(argument,
-                    string.Format(CultureInfo.InvariantCulture, "Specified value cannot be greater than {0}.",
-                        IPEndPoint.MaxPort));
-        }
-
-        internal static void ValidatePort(this int value, string argument)
-        {
-            if (value < IPEndPoint.MinPort)
-                throw new ArgumentOutOfRangeException(argument,
-                    string.Format(CultureInfo.InvariantCulture, "Specified value cannot be less than {0}.",
-                        IPEndPoint.MinPort));
-
-            if (value > IPEndPoint.MaxPort)
-                throw new ArgumentOutOfRangeException(argument,
-                    string.Format(CultureInfo.InvariantCulture, "Specified value cannot be greater than {0}.",
-                        IPEndPoint.MaxPort));
-        }
-
-        /// <summary>
-        /// Returns a specified number of contiguous bytes from a given offset.
-        /// </summary>
-        /// <param name="value">The array to return a number of bytes from.</param>
-        /// <param name="offset">The zero-based offset in <paramref name="value"/> at which to begin taking bytes.</param>
-        /// <param name="count">The number of bytes to take from <paramref name="value"/>.</param>
-        /// <returns>
-        /// A <see cref="byte"/> array that contains the specified number of bytes at the specified offset
-        /// of the input array.
-        /// </returns>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is <c>null</c>.</exception>
-        /// <remarks>
-        /// When <paramref name="offset"/> is zero and <paramref name="count"/> equals the length of <paramref name="value"/>,
-        /// then <paramref name="value"/> is returned.
-        /// </remarks>
-        public static byte[] Take(this byte[] value, int offset, int count)
-        {
-            if (value == null)
-                throw new ArgumentNullException("value");
-
-            if (count == 0)
-                return Array<byte>.Empty;
-
-            if (offset == 0 && value.Length == count)
-                return value;
-
-            var taken = new byte[count];
-            Buffer.BlockCopy(value, offset, taken, 0, count);
-            return taken;
-        }
-
-        /// <summary>
-        /// Returns a specified number of contiguous bytes from the start of the specified byte array.
-        /// </summary>
-        /// <param name="value">The array to return a number of bytes from.</param>
-        /// <param name="count">The number of bytes to take from <paramref name="value"/>.</param>
-        /// <returns>
-        /// A <see cref="byte"/> array that contains the specified number of bytes at the start of the input array.
-        /// </returns>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is <c>null</c>.</exception>
-        /// <remarks>
-        /// When <paramref name="count"/> equals the length of <paramref name="value"/>, then <paramref name="value"/>
-        /// is returned.
-        /// </remarks>
-        public static byte[] Take(this byte[] value, int count)
-        {
-            if (value == null)
-                throw new ArgumentNullException("value");
-
-            if (count == 0)
-                return Array<byte>.Empty;
-
-            if (value.Length == count)
-                return value;
-
-            var taken = new byte[count];
-            Buffer.BlockCopy(value, 0, taken, 0, count);
-            return taken;
-        }
-
-        public static bool IsEqualTo(this byte[] left, byte[] right)
-        {
-            if (left == null)
-                throw new ArgumentNullException("left");
-            if (right == null)
-                throw new ArgumentNullException("right");
-
-            if (left == right)
-                return true;
-
-            if (left.Length != right.Length)
-                return false;
-
-            for (var i = 0; i < left.Length; i++)
-            {
-                if (left[i] != right[i])
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Trims the leading zero from a byte array.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <returns>
-        /// <paramref name="value"/> without leading zeros.
-        /// </returns>
-        public static byte[] TrimLeadingZeros(this byte[] value)
-        {
-            if (value == null)
-                throw new ArgumentNullException("value");
-
-            for (var i = 0; i < value.Length; i++)
-            {
-                if (value[i] == 0)
-                    continue;
-
-                // if the first byte is non-zero, then we return the byte array as is
-                if (i == 0)
-                    return value;
-
-                var remainingBytes = value.Length - i;
-
-                var cleaned = new byte[remainingBytes];
-                Buffer.BlockCopy(value, i, cleaned, 0, remainingBytes);
-                return cleaned;
-            }
-
-            return value;
-        }
-
-        public static byte[] Concat(this byte[] first, byte[] second)
-        {
-            if (first == null || first.Length == 0)
-                return second;
-
-            if (second == null || second.Length == 0)
-                return first;
-
-            var concat = new byte[first.Length + second.Length];
-            Buffer.BlockCopy(first, 0, concat, 0, first.Length);
-            Buffer.BlockCopy(second, 0, concat, first.Length, second.Length);
-            return concat;
-        }
-
-        internal static bool CanRead(this Socket socket)
-        {
-            return SocketAbstraction.CanRead(socket);
-        }
-
-        internal static bool CanWrite(this Socket socket)
-        {
-            return SocketAbstraction.CanWrite(socket);
-        }
-
-        internal static bool IsConnected(this Socket socket)
-        {
-            if (socket == null)
-                return false;
-            return socket.Connected;
-        }
-
-#if !FEATURE_SOCKET_DISPOSE
-        /// <summary>
-        /// Disposes the specified socket.
-        /// </summary>
-        /// <param name="socket">The socket.</param>
-        [DebuggerNonUserCode]
-        internal static void Dispose(this Socket socket)
-        {
-            if (socket == null)
-                throw new NullReferenceException();
-
-            socket.Close();
-        }
-#endif // !FEATURE_SOCKET_DISPOSE
-
-#if !FEATURE_WAITHANDLE_DISPOSE
-        /// <summary>
-        /// Disposes the specified handle.
-        /// </summary>
-        /// <param name="handle">The handle.</param>
-        [DebuggerNonUserCode]
-        internal static void Dispose(this WaitHandle handle)
-        {
-            if (handle == null)
-                throw new NullReferenceException();
-
-            handle.Close();
-        }
-#endif // !FEATURE_WAITHANDLE_DISPOSE
+      if (string.IsNullOrEmpty(value))
+        return true;
+      for (int index = 0; index < value.Length; ++index)
+      {
+        if (!char.IsWhiteSpace(value[index]))
+          return false;
+      }
+      return true;
     }
+
+    internal static byte[] ToArray(this ServiceName serviceName)
+    {
+      switch (serviceName)
+      {
+        case ServiceName.UserAuthentication:
+          return SshData.Ascii.GetBytes("ssh-userauth");
+        case ServiceName.Connection:
+          return SshData.Ascii.GetBytes("ssh-connection");
+        default:
+          throw new NotSupportedException(string.Format("Service name '{0}' is not supported.", (object) serviceName));
+      }
+    }
+
+    internal static ServiceName ToServiceName(this byte[] data)
+    {
+      string str1 = SshData.Ascii.GetString(data, 0, data.Length);
+      string str2 = str1;
+      if (str2 == "ssh-userauth")
+        return ServiceName.UserAuthentication;
+      if (str2 == "ssh-connection")
+        return ServiceName.Connection;
+      throw new NotSupportedException(string.Format("Service name '{0}' is not supported.", (object) str1));
+    }
+
+    internal static BigInteger ToBigInteger(this byte[] data)
+    {
+      byte[] numArray = new byte[data.Length];
+      Buffer.BlockCopy((Array) data, 0, (Array) numArray, 0, data.Length);
+      return new BigInteger(numArray.Reverse<byte>());
+    }
+
+    internal static T[] Reverse<T>(this T[] array)
+    {
+      Array.Reverse<T>(array);
+      return array;
+    }
+
+    internal static void DebugPrint(this IEnumerable<byte> bytes)
+    {
+      StringBuilder stringBuilder = new StringBuilder();
+      foreach (byte num in bytes)
+        stringBuilder.AppendFormat((IFormatProvider) CultureInfo.CurrentCulture, "0x{0:x2}, ", (object) num);
+      Debug.WriteLine(stringBuilder.ToString());
+    }
+
+    internal static T CreateInstance<T>(this Type type) where T : class => type == (Type) null ? default (T) : Activator.CreateInstance(type) as T;
+
+    internal static void ValidatePort(this uint value, string argument)
+    {
+      if (value > (uint) ushort.MaxValue)
+        throw new ArgumentOutOfRangeException(argument, string.Format((IFormatProvider) CultureInfo.InvariantCulture, "Specified value cannot be greater than {0}.", (object) (int) ushort.MaxValue));
+    }
+
+    internal static void ValidatePort(this int value, string argument)
+    {
+      if (value < 0)
+        throw new ArgumentOutOfRangeException(argument, string.Format((IFormatProvider) CultureInfo.InvariantCulture, "Specified value cannot be less than {0}.", (object) 0));
+      if (value > (int) ushort.MaxValue)
+        throw new ArgumentOutOfRangeException(argument, string.Format((IFormatProvider) CultureInfo.InvariantCulture, "Specified value cannot be greater than {0}.", (object) (int) ushort.MaxValue));
+    }
+
+    public static byte[] Take(this byte[] value, int offset, int count)
+    {
+      if (value == null)
+        throw new ArgumentNullException(nameof (value));
+      if (count == 0)
+        return Array<byte>.Empty;
+      if (offset == 0 && value.Length == count)
+        return value;
+      byte[] dst = new byte[count];
+      Buffer.BlockCopy((Array) value, offset, (Array) dst, 0, count);
+      return dst;
+    }
+
+    public static byte[] Take(this byte[] value, int count)
+    {
+      if (value == null)
+        throw new ArgumentNullException(nameof (value));
+      if (count == 0)
+        return Array<byte>.Empty;
+      if (value.Length == count)
+        return value;
+      byte[] dst = new byte[count];
+      Buffer.BlockCopy((Array) value, 0, (Array) dst, 0, count);
+      return dst;
+    }
+
+    public static bool IsEqualTo(this byte[] left, byte[] right)
+    {
+      if (left == null)
+        throw new ArgumentNullException(nameof (left));
+      if (right == null)
+        throw new ArgumentNullException(nameof (right));
+      if (left == right)
+        return true;
+      if (left.Length != right.Length)
+        return false;
+      for (int index = 0; index < left.Length; ++index)
+      {
+        if ((int) left[index] != (int) right[index])
+          return false;
+      }
+      return true;
+    }
+
+    public static byte[] TrimLeadingZeros(this byte[] value)
+    {
+      if (value == null)
+        throw new ArgumentNullException(nameof (value));
+      for (int srcOffset = 0; srcOffset < value.Length; ++srcOffset)
+      {
+        if (value[srcOffset] != (byte) 0)
+        {
+          if (srcOffset == 0)
+            return value;
+          int count = value.Length - srcOffset;
+          byte[] dst = new byte[count];
+          Buffer.BlockCopy((Array) value, srcOffset, (Array) dst, 0, count);
+          return dst;
+        }
+      }
+      return value;
+    }
+
+    public static byte[] Concat(this byte[] first, byte[] second)
+    {
+      if (first == null || first.Length == 0)
+        return second;
+      if (second == null || second.Length == 0)
+        return first;
+      byte[] dst = new byte[first.Length + second.Length];
+      Buffer.BlockCopy((Array) first, 0, (Array) dst, 0, first.Length);
+      Buffer.BlockCopy((Array) second, 0, (Array) dst, first.Length, second.Length);
+      return dst;
+    }
+
+    internal static bool CanRead(this Socket socket) => SocketAbstraction.CanRead(socket);
+
+    internal static bool CanWrite(this Socket socket) => SocketAbstraction.CanWrite(socket);
+
+    internal static bool IsConnected(this Socket socket) => socket != null && socket.Connected;
+  }
 }

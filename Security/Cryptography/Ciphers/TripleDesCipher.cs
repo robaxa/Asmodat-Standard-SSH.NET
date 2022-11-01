@@ -1,145 +1,102 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.Cryptography.Ciphers.TripleDesCipher
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Security.Cryptography.Ciphers
 {
-    /// <summary>
-    /// Implements 3DES cipher algorithm.
-    /// </summary>
-    public sealed class TripleDesCipher : DesCipher
+  public sealed class TripleDesCipher : DesCipher
+  {
+    private int[] _encryptionKey1;
+    private int[] _encryptionKey2;
+    private int[] _encryptionKey3;
+    private int[] _decryptionKey1;
+    private int[] _decryptionKey2;
+    private int[] _decryptionKey3;
+
+    public TripleDesCipher(byte[] key, CipherMode mode, CipherPadding padding)
+      : base(key, mode, padding)
     {
-        private int[] _encryptionKey1;
-        private int[] _encryptionKey2;
-        private int[] _encryptionKey3;
-        private int[] _decryptionKey1;
-        private int[] _decryptionKey2;
-        private int[] _decryptionKey3;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TripleDesCipher"/> class.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <param name="mode">The mode.</param>
-        /// <param name="padding">The padding.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="key"/> is <c>null</c>.</exception>
-        public TripleDesCipher(byte[] key, CipherMode mode, CipherPadding padding)
-            : base(key, mode, padding)
-        {
-        }
-
-        /// <summary>
-        /// Encrypts the specified region of the input byte array and copies the encrypted data to the specified region of the output byte array.
-        /// </summary>
-        /// <param name="inputBuffer">The input data to encrypt.</param>
-        /// <param name="inputOffset">The offset into the input byte array from which to begin using data.</param>
-        /// <param name="inputCount">The number of bytes in the input byte array to use as data.</param>
-        /// <param name="outputBuffer">The output to which to write encrypted data.</param>
-        /// <param name="outputOffset">The offset into the output byte array from which to begin writing data.</param>
-        /// <returns>
-        /// The number of bytes encrypted.
-        /// </returns>
-        public override int EncryptBlock(byte[] inputBuffer, int inputOffset, int inputCount, byte[] outputBuffer, int outputOffset)
-        {
-            if ((inputOffset + BlockSize) > inputBuffer.Length)
-                throw new IndexOutOfRangeException("input buffer too short");
-
-            if ((outputOffset + BlockSize) > outputBuffer.Length)
-                throw new IndexOutOfRangeException("output buffer too short");
-
-            if (_encryptionKey1 == null || _encryptionKey2 == null || _encryptionKey3 == null)
-            {
-                var part1 = new byte[8];
-                var part2 = new byte[8];
-
-                Buffer.BlockCopy(Key, 0, part1, 0, 8);
-                Buffer.BlockCopy(Key, 8, part2, 0, 8);
-
-                _encryptionKey1 = GenerateWorkingKey(true, part1);
-
-                _encryptionKey2 = GenerateWorkingKey(false, part2);
-
-                if (Key.Length == 24)
-                {
-                    var part3 = new byte[8];
-                    Buffer.BlockCopy(Key, 16, part3, 0, 8);
-
-                    _encryptionKey3 = GenerateWorkingKey(true, part3);
-                }
-                else
-                {
-                    _encryptionKey3 = _encryptionKey1;
-                }
-            }
-
-            byte[] temp = new byte[BlockSize];
-
-            DesFunc(_encryptionKey1, inputBuffer, inputOffset, temp, 0);
-            DesFunc(_encryptionKey2, temp, 0, temp, 0);
-            DesFunc(_encryptionKey3, temp, 0, outputBuffer, outputOffset);
-
-            return BlockSize;
-        }
-
-        /// <summary>
-        /// Decrypts the specified region of the input byte array and copies the decrypted data to the specified region of the output byte array.
-        /// </summary>
-        /// <param name="inputBuffer">The input data to decrypt.</param>
-        /// <param name="inputOffset">The offset into the input byte array from which to begin using data.</param>
-        /// <param name="inputCount">The number of bytes in the input byte array to use as data.</param>
-        /// <param name="outputBuffer">The output to which to write decrypted data.</param>
-        /// <param name="outputOffset">The offset into the output byte array from which to begin writing data.</param>
-        /// <returns>
-        /// The number of bytes decrypted.
-        /// </returns>
-        public override int DecryptBlock(byte[] inputBuffer, int inputOffset, int inputCount, byte[] outputBuffer, int outputOffset)
-        {
-            if ((inputOffset + BlockSize) > inputBuffer.Length)
-                throw new IndexOutOfRangeException("input buffer too short");
-
-            if ((outputOffset + BlockSize) > outputBuffer.Length)
-                throw new IndexOutOfRangeException("output buffer too short");
-
-            if (_decryptionKey1 == null || _decryptionKey2 == null || _decryptionKey3 == null)
-            {
-                var part1 = new byte[8];
-                var part2 = new byte[8];
-
-                Buffer.BlockCopy(Key, 0, part1, 0, 8);
-                Buffer.BlockCopy(Key, 8, part2, 0, 8);
-
-                _decryptionKey1 = GenerateWorkingKey(false, part1);
-                _decryptionKey2 = GenerateWorkingKey(true, part2);
-
-                if (Key.Length == 24)
-                {
-                    var part3 = new byte[8];
-                    Buffer.BlockCopy(Key, 16, part3, 0, 8);
-
-                    _decryptionKey3 = GenerateWorkingKey(false, part3);
-                }
-                else
-                {
-                    _decryptionKey3 = _decryptionKey1;
-                }
-            }
-
-            byte[] temp = new byte[BlockSize];
-
-            DesFunc(_decryptionKey3, inputBuffer, inputOffset, temp, 0);
-            DesFunc(_decryptionKey2, temp, 0, temp, 0);
-            DesFunc(_decryptionKey1, temp, 0, outputBuffer, outputOffset);
-
-            return BlockSize;
-        }
-
-        /// <summary>
-        /// Validates the key.
-        /// </summary>
-        protected override void ValidateKey()
-        {
-            var keySize = Key.Length * 8;
-
-            if (!(keySize == 128 || keySize == 128 + 64))
-                throw new ArgumentException(string.Format("KeySize '{0}' is not valid for this algorithm.", keySize));
-        }
     }
+
+    public override int EncryptBlock(
+      byte[] inputBuffer,
+      int inputOffset,
+      int inputCount,
+      byte[] outputBuffer,
+      int outputOffset)
+    {
+      if (inputOffset + (int) this.BlockSize > inputBuffer.Length)
+        throw new IndexOutOfRangeException("input buffer too short");
+      if (outputOffset + (int) this.BlockSize > outputBuffer.Length)
+        throw new IndexOutOfRangeException("output buffer too short");
+      if (this._encryptionKey1 == null || this._encryptionKey2 == null || this._encryptionKey3 == null)
+      {
+        byte[] numArray1 = new byte[8];
+        byte[] numArray2 = new byte[8];
+        Buffer.BlockCopy((Array) this.Key, 0, (Array) numArray1, 0, 8);
+        Buffer.BlockCopy((Array) this.Key, 8, (Array) numArray2, 0, 8);
+        this._encryptionKey1 = this.GenerateWorkingKey(true, numArray1);
+        this._encryptionKey2 = this.GenerateWorkingKey(false, numArray2);
+        if (this.Key.Length == 24)
+        {
+          byte[] numArray3 = new byte[8];
+          Buffer.BlockCopy((Array) this.Key, 16, (Array) numArray3, 0, 8);
+          this._encryptionKey3 = this.GenerateWorkingKey(true, numArray3);
+        }
+        else
+          this._encryptionKey3 = this._encryptionKey1;
+      }
+      byte[] numArray = new byte[(int) this.BlockSize];
+      DesCipher.DesFunc(this._encryptionKey1, inputBuffer, inputOffset, numArray, 0);
+      DesCipher.DesFunc(this._encryptionKey2, numArray, 0, numArray, 0);
+      DesCipher.DesFunc(this._encryptionKey3, numArray, 0, outputBuffer, outputOffset);
+      return (int) this.BlockSize;
+    }
+
+    public override int DecryptBlock(
+      byte[] inputBuffer,
+      int inputOffset,
+      int inputCount,
+      byte[] outputBuffer,
+      int outputOffset)
+    {
+      if (inputOffset + (int) this.BlockSize > inputBuffer.Length)
+        throw new IndexOutOfRangeException("input buffer too short");
+      if (outputOffset + (int) this.BlockSize > outputBuffer.Length)
+        throw new IndexOutOfRangeException("output buffer too short");
+      if (this._decryptionKey1 == null || this._decryptionKey2 == null || this._decryptionKey3 == null)
+      {
+        byte[] numArray1 = new byte[8];
+        byte[] numArray2 = new byte[8];
+        Buffer.BlockCopy((Array) this.Key, 0, (Array) numArray1, 0, 8);
+        Buffer.BlockCopy((Array) this.Key, 8, (Array) numArray2, 0, 8);
+        this._decryptionKey1 = this.GenerateWorkingKey(false, numArray1);
+        this._decryptionKey2 = this.GenerateWorkingKey(true, numArray2);
+        if (this.Key.Length == 24)
+        {
+          byte[] numArray3 = new byte[8];
+          Buffer.BlockCopy((Array) this.Key, 16, (Array) numArray3, 0, 8);
+          this._decryptionKey3 = this.GenerateWorkingKey(false, numArray3);
+        }
+        else
+          this._decryptionKey3 = this._decryptionKey1;
+      }
+      byte[] numArray = new byte[(int) this.BlockSize];
+      DesCipher.DesFunc(this._decryptionKey3, inputBuffer, inputOffset, numArray, 0);
+      DesCipher.DesFunc(this._decryptionKey2, numArray, 0, numArray, 0);
+      DesCipher.DesFunc(this._decryptionKey1, numArray, 0, outputBuffer, outputOffset);
+      return (int) this.BlockSize;
+    }
+
+    protected override void ValidateKey()
+    {
+      int num = this.Key.Length * 8;
+      if (num != 128 && num != 192)
+        throw new ArgumentException(string.Format("KeySize '{0}' is not valid for this algorithm.", (object) num));
+    }
+  }
 }

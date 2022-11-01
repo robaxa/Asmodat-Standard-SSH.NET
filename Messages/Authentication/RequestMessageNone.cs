@@ -1,18 +1,16 @@
-﻿namespace Renci.SshNet.Messages.Authentication
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Authentication.RequestMessageNone
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Messages.Authentication
 {
-    /// <summary>
-    /// Represents "none" SSH_MSG_USERAUTH_REQUEST message.
-    /// </summary>
-    internal class RequestMessageNone : RequestMessage
+  internal class RequestMessageNone : RequestMessage
+  {
+    public RequestMessageNone(ServiceName serviceName, string username)
+      : base(serviceName, username, "none")
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RequestMessagePassword"/> class.
-        /// </summary>
-        /// <param name="serviceName">Name of the service.</param>
-        /// <param name="username">Authentication username.</param>
-        public RequestMessageNone(ServiceName serviceName, string username)
-            : base(serviceName, username, "none")
-        {
-        }
     }
+  }
 }

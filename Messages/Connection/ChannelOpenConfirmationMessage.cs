@@ -1,97 +1,54 @@
-﻿namespace Renci.SshNet.Messages.Connection
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Connection.ChannelOpenConfirmationMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Messages.Connection
 {
-    /// <summary>
-    /// Represents SSH_MSG_CHANNEL_OPEN_CONFIRMATION message.
-    /// </summary>
-    [Message("SSH_MSG_CHANNEL_OPEN_CONFIRMATION", 91)]
-    public class ChannelOpenConfirmationMessage : ChannelMessage
+  [Message("SSH_MSG_CHANNEL_OPEN_CONFIRMATION", 91)]
+  public class ChannelOpenConfirmationMessage : ChannelMessage
+  {
+    public uint RemoteChannelNumber { get; private set; }
+
+    public uint InitialWindowSize { get; private set; }
+
+    public uint MaximumPacketSize { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + 4 + 4;
+
+    public ChannelOpenConfirmationMessage()
     {
-        /// <summary>
-        /// Gets the remote channel number.
-        /// </summary>
-        public uint RemoteChannelNumber { get; private set; }
-
-        /// <summary>
-        /// Gets the initial size of the window.
-        /// </summary>
-        /// <value>
-        /// The initial size of the window.
-        /// </value>
-        public uint InitialWindowSize { get; private set; }
-
-        /// <summary>
-        /// Gets the maximum size of the packet.
-        /// </summary>
-        /// <value>
-        /// The maximum size of the packet.
-        /// </value>
-        public uint MaximumPacketSize { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // RemoteChannelNumber
-                capacity += 4; // InitialWindowSize
-                capacity += 4; // MaximumPacketSize
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelOpenConfirmationMessage"/> class.
-        /// </summary>
-        public ChannelOpenConfirmationMessage()
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelOpenConfirmationMessage"/> class.
-        /// </summary>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        /// <param name="initialWindowSize">Initial size of the window.</param>
-        /// <param name="maximumPacketSize">Maximum size of the packet.</param>
-        /// <param name="remoteChannelNumber">The remote channel number.</param>
-        public ChannelOpenConfirmationMessage(uint localChannelNumber, uint initialWindowSize, uint maximumPacketSize, uint remoteChannelNumber)
-            : base(localChannelNumber)
-        {
-            InitialWindowSize = initialWindowSize;
-            MaximumPacketSize = maximumPacketSize;
-            RemoteChannelNumber = remoteChannelNumber;
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            base.LoadData();
-            RemoteChannelNumber = ReadUInt32();
-            InitialWindowSize = ReadUInt32();
-            MaximumPacketSize = ReadUInt32();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            base.SaveData();
-            Write(RemoteChannelNumber);
-            Write(InitialWindowSize);
-            Write(MaximumPacketSize);
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnChannelOpenConfirmationReceived(this);
-        }
     }
+
+    public ChannelOpenConfirmationMessage(
+      uint localChannelNumber,
+      uint initialWindowSize,
+      uint maximumPacketSize,
+      uint remoteChannelNumber)
+      : base(localChannelNumber)
+    {
+      this.InitialWindowSize = initialWindowSize;
+      this.MaximumPacketSize = maximumPacketSize;
+      this.RemoteChannelNumber = remoteChannelNumber;
+    }
+
+    protected override void LoadData()
+    {
+      base.LoadData();
+      this.RemoteChannelNumber = this.ReadUInt32();
+      this.InitialWindowSize = this.ReadUInt32();
+      this.MaximumPacketSize = this.ReadUInt32();
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.Write(this.RemoteChannelNumber);
+      this.Write(this.InitialWindowSize);
+      this.Write(this.MaximumPacketSize);
+    }
+
+    internal override void Process(Session session) => session.OnChannelOpenConfirmationReceived(this);
+  }
 }

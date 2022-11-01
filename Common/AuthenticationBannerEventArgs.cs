@@ -1,31 +1,22 @@
-﻿namespace Renci.SshNet.Common
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.AuthenticationBannerEventArgs
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Common
 {
-    /// <summary>
-    /// Provides data for <see cref="Renci.SshNet.ConnectionInfo.AuthenticationBanner"/> event.
-    /// </summary>
-    public class AuthenticationBannerEventArgs : AuthenticationEventArgs
+  public class AuthenticationBannerEventArgs : AuthenticationEventArgs
+  {
+    public string BannerMessage { get; private set; }
+
+    public string Language { get; private set; }
+
+    public AuthenticationBannerEventArgs(string username, string message, string language)
+      : base(username)
     {
-        /// <summary>
-        /// Gets banner message.
-        /// </summary>
-        public string BannerMessage { get; private set; }
-
-        /// <summary>
-        /// Gets banner language.
-        /// </summary>
-        public string Language { get; private set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AuthenticationBannerEventArgs"/> class.
-        /// </summary>
-        /// <param name="username">The username.</param>
-        /// <param name="message">Banner message.</param>
-        /// <param name="language">Banner language.</param>
-        public AuthenticationBannerEventArgs(string username, string message, string language)
-            : base(username)
-        {
-            BannerMessage = message;
-            Language = language;
-        }
+      this.BannerMessage = message;
+      this.Language = language;
     }
+  }
 }

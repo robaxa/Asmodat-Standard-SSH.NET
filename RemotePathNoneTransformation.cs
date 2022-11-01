@@ -1,32 +1,15 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.RemotePathNoneTransformation
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet
 {
-    /// <summary>
-    /// Performs no transformation.
-    /// </summary>
-    internal class RemotePathNoneTransformation : IRemotePathTransformation
-    {
-        /// <summary>
-        /// Returns the specified path without applying a transformation.
-        /// </summary>
-        /// <param name="path">The path to transform.</param>
-        /// <returns>
-        /// The specified path as is.
-        /// </returns>
-        /// <exception cref="ArgumentNullException"><paramref name="path"/> is <c>null</c>.</exception>
-        /// <remarks>
-        /// This transformation is recommended for servers that do not require any quoting to preserve the
-        /// literal value of metacharacters, or when paths are guaranteed to never contain any such characters.
-        /// </remarks>
-        public string Transform(string path)
-        {
-            if (path == null)
-            {
-                throw new ArgumentNullException("path");
-            }
-
-            return path;
-        }
-    }
+  internal class RemotePathNoneTransformation : IRemotePathTransformation
+  {
+    public string Transform(string path) => path != null ? path : throw new ArgumentNullException(nameof (path));
+  }
 }

@@ -1,397 +1,145 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.SshData
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace Renci.SshNet.Common
 {
-    /// <summary>
-    /// Base ssh data serialization type
-    /// </summary>
-    public abstract class SshData
+  public abstract class SshData
+  {
+    internal const int DefaultCapacity = 64;
+    internal static readonly Encoding Ascii = Encoding.ASCII;
+    internal static readonly Encoding Utf8 = Encoding.UTF8;
+    private SshDataStream _stream;
+
+    protected SshDataStream DataStream => this._stream;
+
+    protected bool IsEndOfData => this._stream.Position >= this._stream.Length;
+
+    protected virtual int BufferCapacity => 0;
+
+    public byte[] GetBytes()
     {
-        internal const int DefaultCapacity = 64;
-
-#if FEATURE_ENCODING_ASCII
-        internal static readonly Encoding Ascii = Encoding.ASCII;
-#else
-        internal static readonly Encoding Ascii = new ASCIIEncoding();
-#endif
-        internal static readonly Encoding Utf8 = Encoding.UTF8;
-
-        private SshDataStream _stream;
-
-        /// <summary>
-        /// Gets the underlying <see cref="SshDataStream"/> that is used for reading and writing SSH data.
-        /// </summary>
-        /// <value>
-        /// The underlying <see cref="SshDataStream"/> that is used for reading and writing SSH data.
-        /// </value>
-        protected SshDataStream DataStream
-        {
-            get { return _stream; }
-        }
-
-        /// <summary>
-        /// Gets a value indicating whether all data from the buffer has been read.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if this instance is end of data; otherwise, <c>false</c>.
-        /// </value>
-        protected bool IsEndOfData
-        {
-            get
-            {
-                return _stream.Position >= _stream.Length;
-            }
-        }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected virtual int BufferCapacity
-        {
-            get { return 0; }
-        }
-
-        /// <summary>
-        /// Gets data bytes array.
-        /// </summary>
-        /// <returns>
-        /// A <see cref="Byte"/> array representation of data structure.
-        /// </returns>
-        public byte[] GetBytes()
-        {
-            var messageLength = BufferCapacity;
-            var capacity = messageLength != -1 ? messageLength : DefaultCapacity;
-            var dataStream = new SshDataStream(capacity);
-            WriteBytes(dataStream);
-            return dataStream.ToArray();
-        }
-
-        /// <summary>
-        /// Writes the current message to the specified <see cref="SshDataStream"/>.
-        /// </summary>
-        /// <param name="stream">The <see cref="SshDataStream"/> to write the message to.</param>
-        protected virtual void WriteBytes(SshDataStream stream)
-        {
-            _stream = stream;
-            SaveData();
-        }
-
-        /// <summary>
-        /// Loads data from specified bytes.
-        /// </summary>
-        /// <param name="data">Bytes array.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
-        public void Load(byte[] data)
-        {
-            if (data == null)
-                throw new ArgumentNullException("data");
-
-            LoadInternal(data, 0, data.Length);
-        }
-
-        /// <summary>
-        /// Loads data from the specified buffer.
-        /// </summary>
-        /// <param name="data">Bytes array.</param>
-        /// <param name="offset">The zero-based offset in <paramref name="data"/> at which to begin reading SSH data.</param>
-        /// <param name="count">The number of bytes to load.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
-        public void Load(byte[] data, int offset, int count)
-        {
-            if (data == null)
-                throw new ArgumentNullException("data");
-
-            LoadInternal(data, offset, count);
-        }
-
-        private void LoadInternal(byte[] value, int offset, int count)
-        {
-            _stream = new SshDataStream(value, offset, count);
-            LoadData();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected abstract void LoadData();
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected abstract void SaveData();
-
-        /// <summary>
-        /// Reads all data left in internal buffer at current position.
-        /// </summary>
-        /// <returns>An array of bytes containing the remaining data in the internal buffer.</returns>
-        protected byte[] ReadBytes()
-        {
-            var bytesLength = (int) (_stream.Length - _stream.Position);
-            var data = new byte[bytesLength];
-            _stream.Read(data, 0, bytesLength);
-            return data;
-        }
-
-        /// <summary>
-        /// Reads next specified number of bytes data type from internal buffer.
-        /// </summary>
-        /// <param name="length">Number of bytes to read.</param>
-        /// <returns>An array of bytes that was read from the internal buffer.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is greater than the internal buffer size.</exception>
-        protected byte[] ReadBytes(int length)
-        {
-            // Note that this also prevents allocating non-relevant lengths, such as if length is greater than _data.Count but less than int.MaxValue.
-            // For the nerds, the condition translates to: if (length > data.Count && length < int.MaxValue)
-            // Which probably would cause all sorts of exception, most notably OutOfMemoryException.
-
-            var data = new byte[length];
-            var bytesRead = _stream.Read(data, 0, length);
-
-            if (bytesRead < length)
-                throw new ArgumentOutOfRangeException("length");
-
-            return data;
-        }
-
-        /// <summary>
-        /// Reads next byte data type from internal buffer.
-        /// </summary>
-        /// <returns>Byte read.</returns>
-        protected byte ReadByte()
-        {
-            var byteRead = _stream.ReadByte();
-            if (byteRead == -1)
-                throw new InvalidOperationException("Attempt to read past the end of the SSH data stream.");
-            return (byte) byteRead;
-        }
-
-        /// <summary>
-        /// Reads next boolean data type from internal buffer.
-        /// </summary>
-        /// <returns>Boolean read.</returns>
-        protected bool ReadBoolean()
-        {
-            return ReadByte() != 0;
-        }
-
-        /// <summary>
-        /// Reads next uint16 data type from internal buffer.
-        /// </summary>
-        /// <returns>uint16 read</returns>
-        protected ushort ReadUInt16()
-        {
-            return Pack.BigEndianToUInt16(ReadBytes(2));
-        }
-
-        /// <summary>
-        /// Reads next uint32 data type from internal buffer.
-        /// </summary>
-        /// <returns>uint32 read</returns>
-        protected uint ReadUInt32()
-        {
-            return Pack.BigEndianToUInt32(ReadBytes(4));
-        }
-
-        /// <summary>
-        /// Reads next uint64 data type from internal buffer.
-        /// </summary>
-        /// <returns>uint64 read</returns>
-        protected ulong ReadUInt64()
-        {
-            return Pack.BigEndianToUInt64(ReadBytes(8));
-        }
-
-        /// <summary>
-        /// Reads next string data type from internal buffer using the specific encoding.
-        /// </summary>
-        /// <returns>
-        /// The <see cref="string"/> read.
-        /// </returns>
-        protected string ReadString(Encoding encoding)
-        {
-            return _stream.ReadString(encoding);
-        }
-
-        /// <summary>
-        /// Reads next data type as byte array from internal buffer.
-        /// </summary>
-        /// <returns>
-        /// The bytes read.
-        /// </returns>
-        protected byte[] ReadBinary()
-        {
-            return _stream.ReadBinary();
-        }
-
-        /// <summary>
-        /// Reads next name-list data type from internal buffer.
-        /// </summary>
-        /// <returns>
-        /// String array or read data.
-        /// </returns>
-        protected string[] ReadNamesList()
-        {
-            var namesList = ReadString(Ascii);
-            return namesList.Split(',');
-        }
-
-        /// <summary>
-        /// Reads next extension-pair data type from internal buffer.
-        /// </summary>
-        /// <returns>Extensions pair dictionary.</returns>
-        protected IDictionary<string, string> ReadExtensionPair()
-        {
-            var result = new Dictionary<string, string>();
-            while (!IsEndOfData)
-            {
-                var extensionName = ReadString(Ascii);
-                var extensionData = ReadString(Ascii);
-                result.Add(extensionName, extensionData);
-            }
-            return result;
-        }
-
-        /// <summary>
-        /// Writes bytes array data into internal buffer.
-        /// </summary>
-        /// <param name="data">Byte array data to write.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
-        protected void Write(byte[] data)
-        {
-            _stream.Write(data);
-        }
-
-        /// <summary>
-        /// Writes a sequence of bytes to the current SSH data stream and advances the current position
-        /// within this stream by the number of bytes written.
-        /// </summary>
-        /// <param name="buffer">An array of bytes. This method write <paramref name="count"/> bytes from buffer to the current SSH data stream.</param>
-        /// <param name="offset">The zero-based offset in <paramref name="buffer"/> at which to begin writing bytes to the SSH data stream.</param>
-        /// <param name="count">The number of bytes to be written to the current SSH data stream.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">The sum of <paramref name="offset"/> and <paramref name="count"/> is greater than the buffer length.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> or <paramref name="count"/> is negative.</exception>
-        protected void Write(byte[] buffer, int offset, int count)
-        {
-            _stream.Write(buffer, offset, count);
-        }
-
-        /// <summary>
-        /// Writes <see cref="byte"/> data into internal buffer.
-        /// </summary>
-        /// <param name="data"><see cref="byte"/> data to write.</param>
-        protected void Write(byte data)
-        {
-            _stream.WriteByte(data);
-        }
-
-        /// <summary>
-        /// Writes <see cref="bool"/> into internal buffer.
-        /// </summary>
-        /// <param name="data"><see cref="bool" /> data to write.</param>
-        protected void Write(bool data)
-        {
-            Write(data ? (byte) 1 : (byte) 0);
-        }
-
-        /// <summary>
-        /// Writes <see cref="uint"/> data into internal buffer.
-        /// </summary>
-        /// <param name="data"><see cref="uint"/> data to write.</param>
-        protected void Write(uint data)
-        {
-            _stream.Write(data);
-        }
-
-        /// <summary>
-        /// Writes <see cref="ulong" /> data into internal buffer.
-        /// </summary>
-        /// <param name="data"><see cref="ulong"/> data to write.</param>
-        protected void Write(ulong data)
-        {
-            _stream.Write(data);
-        }
-
-        /// <summary>
-        /// Writes <see cref="string"/> data into internal buffer using default encoding.
-        /// </summary>
-        /// <param name="data"><see cref="string"/> data to write.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
-        protected void Write(string data)
-        {
-            Write(data, Utf8);
-        }
-
-        /// <summary>
-        /// Writes <see cref="string"/> data into internal buffer using the specified encoding.
-        /// </summary>
-        /// <param name="data"><see cref="string"/> data to write.</param>
-        /// <param name="encoding">The character encoding to use.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="data"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="encoding"/> is <c>null</c>.</exception>
-        protected void Write(string data, Encoding encoding)
-        {
-            _stream.Write(data, encoding);
-        }
-
-        /// <summary>
-        /// Writes data into internal buffer.
-        /// </summary>
-        /// <param name="buffer">The data to write.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <c>null</c>.</exception>
-        protected void WriteBinaryString(byte[] buffer)
-        {
-            _stream.WriteBinary(buffer);
-        }
-
-        /// <summary>
-        /// Writes data into internal buffer.
-        /// </summary>
-        /// <param name="buffer">An array of bytes. This method write <paramref name="count"/> bytes from buffer to the current SSH data stream.</param>
-        /// <param name="offset">The zero-based byte offset in <paramref name="buffer"/> at which to begin writing bytes to the SSH data stream.</param>
-        /// <param name="count">The number of bytes to be written to the current SSH data stream.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">The sum of <paramref name="offset"/> and <paramref name="count"/> is greater than the buffer length.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> or <paramref name="count"/> is negative.</exception>
-        protected void WriteBinary(byte[] buffer, int offset, int count)
-        {
-            _stream.WriteBinary(buffer, offset, count);
-        }
-
-        /// <summary>
-        /// Writes mpint data into internal buffer.
-        /// </summary>
-        /// <param name="data">mpint data to write.</param>
-        protected void Write(BigInteger data)
-        {
-            _stream.Write(data);
-        }
-
-        /// <summary>
-        /// Writes name-list data into internal buffer.
-        /// </summary>
-        /// <param name="data">name-list data to write.</param>
-        protected void Write(string[] data)
-        {
-            Write(string.Join(",", data), Ascii);
-        }
-
-        /// <summary>
-        /// Writes extension-pair data into internal buffer.
-        /// </summary>
-        /// <param name="data">extension-pair data to write.</param>
-        protected void Write(IDictionary<string, string> data)
-        {
-            foreach (var item in data)
-            {
-                Write(item.Key, Ascii);
-                Write(item.Value, Ascii);
-            }
-        }
+      int bufferCapacity = this.BufferCapacity;
+      SshDataStream stream = new SshDataStream(bufferCapacity != -1 ? bufferCapacity : 64);
+      this.WriteBytes(stream);
+      return stream.ToArray();
     }
+
+    protected virtual void WriteBytes(SshDataStream stream)
+    {
+      this._stream = stream;
+      this.SaveData();
+    }
+
+    public void Load(byte[] data)
+    {
+      if (data == null)
+        throw new ArgumentNullException(nameof (data));
+      this.LoadInternal(data, 0, data.Length);
+    }
+
+    public void Load(byte[] data, int offset, int count)
+    {
+      if (data == null)
+        throw new ArgumentNullException(nameof (data));
+      this.LoadInternal(data, offset, count);
+    }
+
+    private void LoadInternal(byte[] value, int offset, int count)
+    {
+      this._stream = new SshDataStream(value, offset, count);
+      this.LoadData();
+    }
+
+    protected abstract void LoadData();
+
+    protected abstract void SaveData();
+
+    protected byte[] ReadBytes()
+    {
+      int count = (int) (this._stream.Length - this._stream.Position);
+      byte[] buffer = new byte[count];
+      this._stream.Read(buffer, 0, count);
+      return buffer;
+    }
+
+    protected byte[] ReadBytes(int length)
+    {
+      byte[] buffer = new byte[length];
+      if (this._stream.Read(buffer, 0, length) < length)
+        throw new ArgumentOutOfRangeException(nameof (length));
+      return buffer;
+    }
+
+    protected byte ReadByte()
+    {
+      int num = this._stream.ReadByte();
+      return num != -1 ? (byte) num : throw new InvalidOperationException("Attempt to read past the end of the SSH data stream.");
+    }
+
+    protected bool ReadBoolean() => this.ReadByte() > (byte) 0;
+
+    protected ushort ReadUInt16() => Pack.BigEndianToUInt16(this.ReadBytes(2));
+
+    protected uint ReadUInt32() => Pack.BigEndianToUInt32(this.ReadBytes(4));
+
+    protected ulong ReadUInt64() => Pack.BigEndianToUInt64(this.ReadBytes(8));
+
+    protected string ReadString(Encoding encoding) => this._stream.ReadString(encoding);
+
+    protected byte[] ReadBinary() => this._stream.ReadBinary();
+
+    protected string[] ReadNamesList() => this.ReadString(SshData.Ascii).Split(',');
+
+    protected IDictionary<string, string> ReadExtensionPair()
+    {
+      Dictionary<string, string> dictionary = new Dictionary<string, string>();
+      while (!this.IsEndOfData)
+      {
+        string key = this.ReadString(SshData.Ascii);
+        string str = this.ReadString(SshData.Ascii);
+        dictionary.Add(key, str);
+      }
+      return (IDictionary<string, string>) dictionary;
+    }
+
+    protected void Write(byte[] data) => this._stream.Write(data);
+
+    protected void Write(byte[] buffer, int offset, int count) => this._stream.Write(buffer, offset, count);
+
+    protected void Write(byte data) => this._stream.WriteByte(data);
+
+    protected void Write(bool data) => this.Write(data ? (byte) 1 : (byte) 0);
+
+    protected void Write(uint data) => this._stream.Write(data);
+
+    protected void Write(ulong data) => this._stream.Write(data);
+
+    protected void Write(string data) => this.Write(data, SshData.Utf8);
+
+    protected void Write(string data, Encoding encoding) => this._stream.Write(data, encoding);
+
+    protected void WriteBinaryString(byte[] buffer) => this._stream.WriteBinary(buffer);
+
+    protected void WriteBinary(byte[] buffer, int offset, int count) => this._stream.WriteBinary(buffer, offset, count);
+
+    protected void Write(BigInteger data) => this._stream.Write(data);
+
+    protected void Write(string[] data) => this.Write(string.Join(",", data), SshData.Ascii);
+
+    protected void Write(IDictionary<string, string> data)
+    {
+      foreach (KeyValuePair<string, string> keyValuePair in (IEnumerable<KeyValuePair<string, string>>) data)
+      {
+        this.Write(keyValuePair.Key, SshData.Ascii);
+        this.Write(keyValuePair.Value, SshData.Ascii);
+      }
+    }
+  }
 }

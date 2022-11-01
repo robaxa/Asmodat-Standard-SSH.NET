@@ -1,63 +1,36 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.HostKeyEventArgs
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Abstractions;
 using Renci.SshNet.Security;
+using System;
+using System.Security.Cryptography;
 
 namespace Renci.SshNet.Common
 {
-    /// <summary>
-    /// Provides data for the HostKeyReceived event.
-    /// </summary>
-    public class HostKeyEventArgs : EventArgs
+  public class HostKeyEventArgs : EventArgs
+  {
+    public bool CanTrust { get; set; }
+
+    public byte[] HostKey { get; private set; }
+
+    public string HostKeyName { get; private set; }
+
+    public byte[] FingerPrint { get; private set; }
+
+    public int KeyLength { get; private set; }
+
+    public HostKeyEventArgs(KeyHostAlgorithm host)
     {
-        /// <summary>
-        /// Gets or sets a value indicating whether host key can be trusted.
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if host key can be trusted; otherwise, <c>false</c>.
-        /// </value>
-        public bool CanTrust { get; set; }
-
-        /// <summary>
-        /// Gets the host key.
-        /// </summary>
-        public byte[] HostKey { get; private set; }
-
-        /// <summary>
-        /// Gets the host key name.
-        /// </summary>
-        public string HostKeyName{ get; private set; }
-
-        /// <summary>
-        /// Gets the finger print.
-        /// </summary>
-        public byte[] FingerPrint { get; private set; }
-
-        /// <summary>
-        /// Gets the length of the key in bits.
-        /// </summary>
-        /// <value>
-        /// The length of the key in bits.
-        /// </value>
-        public int KeyLength { get; private set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="HostKeyEventArgs"/> class.
-        /// </summary>
-        /// <param name="host">The host.</param>
-        public HostKeyEventArgs(KeyHostAlgorithm host)
-        {
-            CanTrust = true;   //  Set default value
-
-            HostKey = host.Data;
-
-            HostKeyName = host.Name;
-
-            KeyLength = host.Key.KeyLength;
-
-            using (var md5 = CryptoAbstraction.CreateMD5())
-            {
-                FingerPrint = md5.ComputeHash(host.Data);
-            }
-        }
+      this.CanTrust = true;
+      this.HostKey = host.Data;
+      this.HostKeyName = host.Name;
+      this.KeyLength = host.Key.KeyLength;
+      using (MD5 md5 = CryptoAbstraction.CreateMD5())
+        this.FingerPrint = md5.ComputeHash(host.Data);
     }
+  }
 }

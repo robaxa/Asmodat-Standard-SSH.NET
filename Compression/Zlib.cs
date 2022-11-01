@@ -1,26 +1,19 @@
-﻿namespace Renci.SshNet.Compression
-{
-    /// <summary>
-    /// Represents "zlib" compression implementation
-    /// </summary>
-    internal class Zlib : Compressor
-    {
-        /// <summary>
-        /// Gets algorithm name.
-        /// </summary>
-        public override string Name
-        {
-            get { return "zlib"; }
-        }
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Compression.Zlib
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
 
-        /// <summary>
-        /// Initializes the algorithm
-        /// </summary>
-        /// <param name="session">The session.</param>
-        public override void Init(Session session)
-        {
-            base.Init(session);
-            IsActive = true;
-        }
+namespace Renci.SshNet.Compression
+{
+  internal class Zlib : Compressor
+  {
+    public override string Name => "zlib";
+
+    public override void Init(Session session)
+    {
+      base.Init(session);
+      this.IsActive = true;
     }
+  }
 }

@@ -1,45 +1,21 @@
-﻿using System.IO;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Compression.ZlibStream
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System.IO;
 
 namespace Renci.SshNet.Compression
 {
-    /// <summary>
-    /// Implements Zlib compression algorithm.
-    /// </summary>
-    public class ZlibStream
+  public class ZlibStream
+  {
+    public ZlibStream(Stream stream, CompressionMode mode)
     {
-        //private readonly Ionic.Zlib.ZlibStream _baseStream;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ZlibStream" /> class.
-        /// </summary>
-        /// <param name="stream">The stream.</param>
-        /// <param name="mode">The mode.</param>
-        public ZlibStream(Stream stream, CompressionMode mode)
-        {
-            //switch (mode)
-            //{
-            //    case CompressionMode.Compress:
-            //        this._baseStream = new Ionic.Zlib.ZlibStream(stream, Ionic.Zlib.CompressionMode.Compress, Ionic.Zlib.CompressionLevel.Default);
-            //        break;
-            //    case CompressionMode.Decompress:
-            //        this._baseStream = new Ionic.Zlib.ZlibStream(stream, Ionic.Zlib.CompressionMode.Decompress, Ionic.Zlib.CompressionLevel.Default);
-            //        break;
-            //    default:
-            //        break;
-            //}
-
-            //this._baseStream.FlushMode = Ionic.Zlib.FlushType.Partial;
-        }
-
-        /// <summary>
-        /// Writes the specified buffer.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="count">The count.</param>
-        public void Write(byte[] buffer, int offset, int count)
-        {
-            //this._baseStream.Write(buffer, offset, count);
-        }
     }
+
+    public void Write(byte[] buffer, int offset, int count)
+    {
+    }
+  }
 }

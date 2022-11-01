@@ -1,31 +1,23 @@
-﻿namespace Renci.SshNet.Messages.Connection
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Connection.ChannelCloseMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Messages.Connection
 {
-    /// <summary>
-    /// Represents SSH_MSG_CHANNEL_CLOSE message.
-    /// </summary>
-    [Message("SSH_MSG_CHANNEL_CLOSE", 97)]
-    public class ChannelCloseMessage : ChannelMessage
+  [Message("SSH_MSG_CHANNEL_CLOSE", 97)]
+  public class ChannelCloseMessage : ChannelMessage
+  {
+    public ChannelCloseMessage()
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelCloseMessage"/> class.
-        /// </summary>
-        public ChannelCloseMessage()
-        {
-
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelCloseMessage"/> class.
-        /// </summary>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        public ChannelCloseMessage(uint localChannelNumber)
-            : base(localChannelNumber)
-        {
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnChannelCloseReceived(this);
-        }
     }
+
+    public ChannelCloseMessage(uint localChannelNumber)
+      : base(localChannelNumber)
+    {
+    }
+
+    internal override void Process(Session session) => session.OnChannelCloseReceived(this);
+  }
 }

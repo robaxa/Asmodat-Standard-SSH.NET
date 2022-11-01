@@ -1,58 +1,33 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Authentication.FailureMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Messages.Authentication
 {
-    /// <summary>
-    /// Represents SSH_MSG_USERAUTH_FAILURE message.
-    /// </summary>
-    [Message("SSH_MSG_USERAUTH_FAILURE", 51)]
-    public class FailureMessage : Message
+  [Renci.SshNet.Messages.Message("SSH_MSG_USERAUTH_FAILURE", 51)]
+  public class FailureMessage : Renci.SshNet.Messages.Message
+  {
+    public string[] AllowedAuthentications { get; set; }
+
+    public string Message { get; private set; }
+
+    public bool PartialSuccess { get; private set; }
+
+    protected override void LoadData()
     {
-        /// <summary>
-        /// Gets or sets the allowed authentications if available.
-        /// </summary>
-        /// <value>
-        /// The allowed authentications.
-        /// </value>
-        public string[] AllowedAuthentications { get; set; }
-
-        /// <summary>
-        /// Gets failure message.
-        /// </summary>
-        public string Message { get; private set; }
-
-        /// <summary>
-        /// Gets a value indicating whether authentication is partially successful.
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if partially successful; otherwise, <c>false</c>.
-        /// </value>
-        public bool PartialSuccess { get; private set; }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            AllowedAuthentications = ReadNamesList();
-            PartialSuccess = ReadBoolean();
-            if (PartialSuccess)
-            {
-                Message = string.Join(",", AllowedAuthentications);
-            }
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            throw new NotImplementedException();
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnUserAuthenticationFailureReceived(this);
-        }
+      this.AllowedAuthentications = this.ReadNamesList();
+      this.PartialSuccess = this.ReadBoolean();
+      if (!this.PartialSuccess)
+        return;
+      this.Message = string.Join(",", this.AllowedAuthentications);
     }
+
+    protected override void SaveData() => throw new NotImplementedException();
+
+    internal override void Process(Session session) => session.OnUserAuthenticationFailureReceived(this);
+  }
 }

@@ -1,31 +1,32 @@
-﻿namespace Renci.SshNet.Sftp.Responses
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Sftp.Responses.SftpDataResponse
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Sftp.Responses
 {
-    internal class SftpDataResponse : SftpResponse
+  internal class SftpDataResponse : SftpResponse
+  {
+    public override SftpMessageTypes SftpMessageType => SftpMessageTypes.Data;
+
+    public byte[] Data { get; set; }
+
+    public SftpDataResponse(uint protocolVersion)
+      : base(protocolVersion)
     {
-        public override SftpMessageTypes SftpMessageType
-        {
-            get { return SftpMessageTypes.Data; }
-        }
-
-        public byte[] Data { get; set; }
-
-        public SftpDataResponse(uint protocolVersion)
-            : base(protocolVersion)
-        {
-        }
-
-        protected override void LoadData()
-        {
-            base.LoadData();
-            
-            Data = ReadBinary();
-        }
-
-        protected override void SaveData()
-        {
-            base.SaveData();
-
-            WriteBinary(Data, 0, Data.Length);
-        }
     }
+
+    protected override void LoadData()
+    {
+      base.LoadData();
+      this.Data = this.ReadBinary();
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.WriteBinary(this.Data, 0, this.Data.Length);
+    }
+  }
 }

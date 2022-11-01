@@ -1,149 +1,78 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.Cryptography.Ciphers.RsaCipher
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using System;
 
 namespace Renci.SshNet.Security.Cryptography.Ciphers
 {
-    /// <summary>
-    /// Implements RSA cipher algorithm.
-    /// </summary>
-    public class RsaCipher : AsymmetricCipher
+  public class RsaCipher : AsymmetricCipher
+  {
+    private readonly bool _isPrivate;
+    private readonly RsaKey _key;
+
+    public RsaCipher(RsaKey key)
     {
-        private readonly bool _isPrivate;
-
-        private readonly RsaKey _key;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RsaCipher"/> class.
-        /// </summary>
-        /// <param name="key">The RSA key.</param>
-        public RsaCipher(RsaKey key)
-        {
-            if (key == null)
-                throw new ArgumentNullException("key");
-
-            _key = key;
-            _isPrivate = !_key.D.IsZero;
-        }
-
-        /// <summary>
-        /// Encrypts the specified data.
-        /// </summary>
-        /// <param name="data">The data.</param>
-        /// <param name="offset">The zero-based offset in <paramref name="data"/> at which to begin encrypting.</param>
-        /// <param name="length">The number of bytes to encrypt from <paramref name="data"/>.</param>
-        /// <returns>Encrypted data.</returns>
-        public override byte[] Encrypt(byte[] data, int offset, int length)
-        {
-            //  Calculate signature
-            var bitLength = _key.Modulus.BitLength;
-
-            var paddedBlock = new byte[bitLength / 8 + (bitLength % 8 > 0 ? 1 : 0) - 1];
-
-            paddedBlock[0] = 0x01;
-            for (var i = 1; i < paddedBlock.Length - length - 1; i++)
-            {
-                paddedBlock[i] = 0xFF;
-            }
-
-            Buffer.BlockCopy(data, offset, paddedBlock, paddedBlock.Length - length, length);
-
-            return Transform(paddedBlock);
-        }
-
-        /// <summary>
-        /// Decrypts the specified data.
-        /// </summary>
-        /// <param name="data">The data.</param>
-        /// <returns>
-        /// The decrypted data.
-        /// </returns>
-        /// <exception cref="NotSupportedException">Only block type 01 or 02 are supported.</exception>
-        /// <exception cref="NotSupportedException">Thrown when decrypted block type is not supported.</exception>
-        public override byte[] Decrypt(byte[] data)
-        {
-            return Decrypt(data, 0, data.Length);
-        }
-
-        /// <summary>
-        /// Decrypts the specified input.
-        /// </summary>
-        /// <param name="data">The input.</param>
-        /// <param name="offset">The zero-based offset in <paramref name="data"/> at which to begin decrypting.</param>
-        /// <param name="length">The number of bytes to decrypt from <paramref name="data"/>.</param>
-        /// <returns>
-        /// The decrypted data.
-        /// </returns>
-        /// <exception cref="NotSupportedException">Only block type 01 or 02 are supported.</exception>
-        /// <exception cref="NotSupportedException">Thrown when decrypted block type is not supported.</exception>
-        public override byte[] Decrypt(byte[] data, int offset, int length)
-        {
-            var paddedBlock = Transform(data, offset, length);
-
-            if (paddedBlock[0] != 1 && paddedBlock[0] != 2)
-                throw new NotSupportedException("Only block type 01 or 02 are supported.");
-
-            var position = 1;
-            while (position < paddedBlock.Length && paddedBlock[position] != 0)
-                position++;
-            position++;
-
-            var result = new byte[paddedBlock.Length - position];
-            Buffer.BlockCopy(paddedBlock, position, result, 0, result.Length);
-            return result;
-        }
-
-        private byte[] Transform(byte[] data)
-        {
-            return Transform(data, 0, data.Length);
-        }
-
-        private byte[] Transform(byte[] data, int offset, int length)
-        {
-            Array.Reverse(data, offset, length);
-
-            var inputBytes = new byte[length + 1];
-            Buffer.BlockCopy(data, offset, inputBytes, 0, length);
-
-            var input = new BigInteger(inputBytes);
-
-            BigInteger result;
-
-            if (_isPrivate)
-            {
-                var random = BigInteger.One;
-                var max = _key.Modulus - 1;
-                var bitLength = _key.Modulus.BitLength;
-
-                if (max < BigInteger.One)
-                    throw new SshException("Invalid RSA key.");
-
-                while (random <= BigInteger.One || random >= max)
-                {
-                    random = BigInteger.Random(bitLength);
-                }
-
-                var blindedInput = BigInteger.PositiveMod((BigInteger.ModPow(random, _key.Exponent, _key.Modulus) * input), _key.Modulus);
-
-                // mP = ((input Mod p) ^ dP)) Mod p
-                var mP = BigInteger.ModPow((blindedInput % _key.P), _key.DP, _key.P);
-
-                // mQ = ((input Mod q) ^ dQ)) Mod q
-                var mQ = BigInteger.ModPow((blindedInput % _key.Q), _key.DQ, _key.Q);
-
-                var h = BigInteger.PositiveMod(((mP - mQ) * _key.InverseQ), _key.P);
-
-                var m = h * _key.Q + mQ;
-
-                var rInv = BigInteger.ModInverse(random, _key.Modulus);
-
-                result = BigInteger.PositiveMod((m * rInv), _key.Modulus);
-            }
-            else
-            {
-                result = BigInteger.ModPow(input, _key.Exponent, _key.Modulus);
-            }
-
-            return result.ToByteArray().Reverse();
-        }
+      this._key = key != null ? key : throw new ArgumentNullException(nameof (key));
+      this._isPrivate = !this._key.D.IsZero;
     }
+
+    public override byte[] Encrypt(byte[] data, int offset, int length)
+    {
+      int bitLength = this._key.Modulus.BitLength;
+      byte[] numArray = new byte[bitLength / 8 + (bitLength % 8 > 0 ? 1 : 0) - 1];
+      numArray[0] = (byte) 1;
+      for (int index = 1; index < numArray.Length - length - 1; ++index)
+        numArray[index] = byte.MaxValue;
+      Buffer.BlockCopy((Array) data, offset, (Array) numArray, numArray.Length - length, length);
+      return this.Transform(numArray);
+    }
+
+    public override byte[] Decrypt(byte[] data) => this.Decrypt(data, 0, data.Length);
+
+    public override byte[] Decrypt(byte[] data, int offset, int length)
+    {
+      byte[] src = this.Transform(data, offset, length);
+      if (src[0] != (byte) 1 && src[0] != (byte) 2)
+        throw new NotSupportedException("Only block type 01 or 02 are supported.");
+      int index = 1;
+      while (index < src.Length && src[index] > (byte) 0)
+        ++index;
+      int srcOffset = index + 1;
+      byte[] dst = new byte[src.Length - srcOffset];
+      Buffer.BlockCopy((Array) src, srcOffset, (Array) dst, 0, dst.Length);
+      return dst;
+    }
+
+    private byte[] Transform(byte[] data) => this.Transform(data, 0, data.Length);
+
+    private byte[] Transform(byte[] data, int offset, int length)
+    {
+      Array.Reverse<byte>(data, offset, length);
+      byte[] dst = new byte[length + 1];
+      Buffer.BlockCopy((Array) data, offset, (Array) dst, 0, length);
+      BigInteger bigInteger1 = new BigInteger(dst);
+      BigInteger bigInteger2;
+      if (this._isPrivate)
+      {
+        BigInteger bi = BigInteger.One;
+        BigInteger bigInteger3 = this._key.Modulus - (BigInteger) 1;
+        int bitLength = this._key.Modulus.BitLength;
+        if (bigInteger3 < BigInteger.One)
+          throw new SshException("Invalid RSA key.");
+        while (bi <= BigInteger.One || bi >= bigInteger3)
+          bi = BigInteger.Random(bitLength);
+        BigInteger bigInteger4 = BigInteger.PositiveMod(BigInteger.ModPow(bi, this._key.Exponent, this._key.Modulus) * bigInteger1, this._key.Modulus);
+        BigInteger bigInteger5 = BigInteger.ModPow(bigInteger4 % this._key.P, this._key.DP, this._key.P);
+        BigInteger bigInteger6 = BigInteger.ModPow(bigInteger4 % this._key.Q, this._key.DQ, this._key.Q);
+        bigInteger2 = BigInteger.PositiveMod((BigInteger.PositiveMod((bigInteger5 - bigInteger6) * this._key.InverseQ, this._key.P) * this._key.Q + bigInteger6) * BigInteger.ModInverse(bi, this._key.Modulus), this._key.Modulus);
+      }
+      else
+        bigInteger2 = BigInteger.ModPow(bigInteger1, this._key.Exponent, this._key.Modulus);
+      return bigInteger2.ToByteArray().Reverse<byte>();
+    }
+  }
 }

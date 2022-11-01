@@ -1,83 +1,52 @@
-﻿namespace Renci.SshNet.Messages.Authentication
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Authentication.RequestMessagePassword
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Messages.Authentication
 {
-    /// <summary>
-    /// Represents "password" SSH_MSG_USERAUTH_REQUEST message.
-    /// </summary>
-    internal class RequestMessagePassword : RequestMessage
+  internal class RequestMessagePassword : RequestMessage
+  {
+    public byte[] Password { get; private set; }
+
+    public byte[] NewPassword { get; private set; }
+
+    protected override int BufferCapacity
     {
-        /// <summary>
-        /// Gets authentication password.
-        /// </summary>
-        public byte[] Password { get; private set; }
-
-        /// <summary>
-        /// Gets new authentication password.
-        /// </summary>
-        public byte[] NewPassword { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 1; // NewPassword flag
-                capacity += 4; // Password length
-                capacity += Password.Length; // Password
-
-                if (NewPassword != null)
-                {
-                    capacity += 4; // NewPassword length
-                    capacity += NewPassword.Length; // NewPassword
-                }
-
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RequestMessagePassword"/> class.
-        /// </summary>
-        /// <param name="serviceName">Name of the service.</param>
-        /// <param name="username">Authentication username.</param>
-        /// <param name="password">Authentication password.</param>
-        public RequestMessagePassword(ServiceName serviceName, string username, byte[] password)
-            : base(serviceName, username, "password")
-        {
-            Password = password;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RequestMessagePassword"/> class.
-        /// </summary>
-        /// <param name="serviceName">Name of the service.</param>
-        /// <param name="username">Authentication username.</param>
-        /// <param name="password">Authentication password.</param>
-        /// <param name="newPassword">New authentication password.</param>
-        public RequestMessagePassword(ServiceName serviceName, string username, byte[] password, byte[] newPassword)
-            : this(serviceName, username, password)
-        {
-            NewPassword = newPassword;
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            base.SaveData();
-
-            Write(NewPassword != null);
-            WriteBinaryString(Password);
-            if (NewPassword != null)
-            {
-                WriteBinaryString(NewPassword);
-            }
-        }
+      get
+      {
+        int bufferCapacity = base.BufferCapacity + 1 + 4 + this.Password.Length;
+        if (this.NewPassword != null)
+          bufferCapacity = bufferCapacity + 4 + this.NewPassword.Length;
+        return bufferCapacity;
+      }
     }
+
+    public RequestMessagePassword(ServiceName serviceName, string username, byte[] password)
+      : base(serviceName, username, nameof (password))
+    {
+      this.Password = password;
+    }
+
+    public RequestMessagePassword(
+      ServiceName serviceName,
+      string username,
+      byte[] password,
+      byte[] newPassword)
+      : this(serviceName, username, password)
+    {
+      this.NewPassword = newPassword;
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.Write(this.NewPassword != null);
+      this.WriteBinaryString(this.Password);
+      if (this.NewPassword == null)
+        return;
+      this.WriteBinaryString(this.NewPassword);
+    }
+  }
 }

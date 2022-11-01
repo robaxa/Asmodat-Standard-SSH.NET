@@ -1,75 +1,64 @@
-﻿using System;
-using System.Text;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Sftp.Requests.SftpLStatRequest
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Sftp.Responses;
+using System;
+using System.Text;
 
 namespace Renci.SshNet.Sftp.Requests
 {
-    internal class SftpLStatRequest : SftpRequest
+  internal class SftpLStatRequest : SftpRequest
+  {
+    private byte[] _path;
+    private readonly Action<SftpAttrsResponse> _attrsAction;
+
+    public override SftpMessageTypes SftpMessageType => SftpMessageTypes.LStat;
+
+    public string Path
     {
-        private byte[] _path;
-        private readonly Action<SftpAttrsResponse> _attrsAction;
-
-        public override SftpMessageTypes SftpMessageType
-        {
-            get { return SftpMessageTypes.LStat; }
-        }
-
-        public string Path
-        {
-            get { return Encoding.GetString(_path, 0, _path.Length); }
-            private set { _path = Encoding.GetBytes(value); }
-        }
-
-        public Encoding Encoding { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // Path length
-                capacity += _path.Length; // Path
-                return capacity;
-            }
-        }
-
-        public SftpLStatRequest(uint protocolVersion, uint requestId, string path, Encoding encoding, Action<SftpAttrsResponse> attrsAction, Action<SftpStatusResponse> statusAction)
-            : base(protocolVersion, requestId, statusAction)
-        {
-            Encoding = encoding;
-            Path = path;
-            _attrsAction = attrsAction;
-        }
-
-        protected override void LoadData()
-        {
-            base.LoadData();
-            _path = ReadBinary();
-        }
-
-        protected override void SaveData()
-        {
-            base.SaveData();
-            WriteBinaryString(_path);
-        }
-
-        public override void Complete(SftpResponse response)
-        {
-            var attrsResponse = response as SftpAttrsResponse;
-            if (attrsResponse != null)
-            {
-                _attrsAction(attrsResponse);
-            }
-            else
-            {
-                base.Complete(response);
-            }
-        }
+      get => this.Encoding.GetString(this._path, 0, this._path.Length);
+      private set => this._path = this.Encoding.GetBytes(value);
     }
+
+    public Encoding Encoding { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this._path.Length;
+
+    public SftpLStatRequest(
+      uint protocolVersion,
+      uint requestId,
+      string path,
+      Encoding encoding,
+      Action<SftpAttrsResponse> attrsAction,
+      Action<SftpStatusResponse> statusAction)
+      : base(protocolVersion, requestId, statusAction)
+    {
+      this.Encoding = encoding;
+      this.Path = path;
+      this._attrsAction = attrsAction;
+    }
+
+    protected override void LoadData()
+    {
+      base.LoadData();
+      this._path = this.ReadBinary();
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.WriteBinaryString(this._path);
+    }
+
+    public override void Complete(SftpResponse response)
+    {
+      if (response is SftpAttrsResponse sftpAttrsResponse)
+        this._attrsAction(sftpAttrsResponse);
+      else
+        base.Complete(response);
+    }
+  }
 }

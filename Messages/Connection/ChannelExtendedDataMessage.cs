@@ -1,82 +1,45 @@
-﻿namespace Renci.SshNet.Messages.Connection
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Connection.ChannelExtendedDataMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Messages.Connection
 {
-    /// <summary>
-    /// Represents SSH_MSG_CHANNEL_EXTENDED_DATA message.
-    /// </summary>
-    [Message("SSH_MSG_CHANNEL_EXTENDED_DATA", 95)]
-    public class ChannelExtendedDataMessage : ChannelMessage
+  [Message("SSH_MSG_CHANNEL_EXTENDED_DATA", 95)]
+  public class ChannelExtendedDataMessage : ChannelMessage
+  {
+    public uint DataTypeCode { get; private set; }
+
+    public byte[] Data { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + 4 + this.Data.Length;
+
+    public ChannelExtendedDataMessage()
     {
-        /// <summary>
-        /// Gets message data type code.
-        /// </summary>
-        public uint DataTypeCode { get; private set; }
-
-        /// <summary>
-        /// Gets message data.
-        /// </summary>
-        public byte[] Data { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // DataTypeCode
-                capacity += 4; // Data length
-                capacity += Data.Length; // Data
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelExtendedDataMessage"/> class.
-        /// </summary>
-        public ChannelExtendedDataMessage()
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelExtendedDataMessage"/> class.
-        /// </summary>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        /// <param name="dataTypeCode">The message data type code.</param>
-        /// <param name="data">The message data.</param>
-        public ChannelExtendedDataMessage(uint localChannelNumber, uint dataTypeCode, byte[] data)
-            : base(localChannelNumber)
-        {
-            DataTypeCode = dataTypeCode;
-            Data = data;
-        }
-
-        /// <summary>
-        /// Loads the data.
-        /// </summary>
-        protected override void LoadData()
-        {
-            base.LoadData();
-            DataTypeCode = ReadUInt32();
-            Data = ReadBinary();
-        }
-
-        /// <summary>
-        /// Saves the data.
-        /// </summary>
-        protected override void SaveData()
-        {
-            base.SaveData();
-            Write(DataTypeCode);
-            WriteBinaryString(Data);
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnChannelExtendedDataReceived(this);
-        }
     }
+
+    public ChannelExtendedDataMessage(uint localChannelNumber, uint dataTypeCode, byte[] data)
+      : base(localChannelNumber)
+    {
+      this.DataTypeCode = dataTypeCode;
+      this.Data = data;
+    }
+
+    protected override void LoadData()
+    {
+      base.LoadData();
+      this.DataTypeCode = this.ReadUInt32();
+      this.Data = this.ReadBinary();
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.Write(this.DataTypeCode);
+      this.WriteBinaryString(this.Data);
+    }
+
+    internal override void Process(Session session) => session.OnChannelExtendedDataReceived(this);
+  }
 }

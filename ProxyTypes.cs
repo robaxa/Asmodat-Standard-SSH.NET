@@ -1,17 +1,16 @@
-﻿namespace Renci.SshNet
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.ProxyTypes
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet
 {
-    /// <summary>
-    /// Specifies the type of proxy client will use to connect to server.
-    /// </summary>
-    public enum ProxyTypes
-    {
-        /// <summary>No proxy server.</summary>
-        None,
-        /// <summary>A SOCKS4 proxy server.</summary>
-        Socks4,
-        /// <summary>A SOCKS5 proxy server.</summary>
-        Socks5,
-        /// <summary>A HTTP proxy server.</summary>
-        Http,
-    }
+  public enum ProxyTypes
+  {
+    None,
+    Socks4,
+    Socks5,
+    Http,
+  }
 }

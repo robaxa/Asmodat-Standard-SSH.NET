@@ -1,86 +1,44 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.Cryptography.CipherDigitalSignature
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using System;
 
 namespace Renci.SshNet.Security.Cryptography
 {
-    /// <summary>
-    /// Implements digital signature where where asymmetric cipher is used,
-    /// </summary>
-    public abstract class CipherDigitalSignature : DigitalSignature
+  public abstract class CipherDigitalSignature : DigitalSignature
+  {
+    private readonly AsymmetricCipher _cipher;
+    private readonly ObjectIdentifier _oid;
+
+    protected CipherDigitalSignature(ObjectIdentifier oid, AsymmetricCipher cipher)
     {
-        private readonly AsymmetricCipher _cipher;
-        private readonly ObjectIdentifier _oid;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CipherDigitalSignature"/> class.
-        /// </summary>
-        /// <param name="oid">The object identifier.</param>
-        /// <param name="cipher">The cipher.</param>
-        protected CipherDigitalSignature(ObjectIdentifier oid, AsymmetricCipher cipher)
-        {
-            if (cipher == null)
-                throw new ArgumentNullException("cipher");
-
-            _cipher = cipher;
-            _oid = oid;
-        }
-
-        /// <summary>
-        /// Verifies the signature.
-        /// </summary>
-        /// <param name="input">The input.</param>
-        /// <param name="signature">The signature.</param>
-        /// <returns>
-        ///   <c>True</c> if signature was successfully verified; otherwise <c>false</c>.
-        /// </returns>
-        public override bool Verify(byte[] input, byte[] signature)
-        {
-            var encryptedSignature = _cipher.Decrypt(signature);
-            var hashData = Hash(input);
-            var expected = DerEncode(hashData);
-            return expected.IsEqualTo(encryptedSignature);
-        }
-
-        /// <summary>
-        /// Creates the signature.
-        /// </summary>
-        /// <param name="input">The input.</param>
-        /// <returns>
-        /// Signed input data.
-        /// </returns>
-        public override byte[] Sign(byte[] input)
-        {
-            //  Calculate hash value
-            var hashData = Hash(input);
-
-            //  Calculate DER string
-            var derEncodedHash = DerEncode(hashData);
-
-            return _cipher.Encrypt(derEncodedHash).TrimLeadingZeros();
-        }
-
-        /// <summary>
-        /// Hashes the specified input.
-        /// </summary>
-        /// <param name="input">The input.</param>
-        /// <returns>Hashed data.</returns>
-        protected abstract byte[] Hash(byte[] input);
-
-        /// <summary>
-        /// Encodes hash using DER.
-        /// </summary>
-        /// <param name="hashData">The hash data.</param>
-        /// <returns>DER Encoded byte array</returns>
-        protected byte[] DerEncode(byte[] hashData)
-        {
-            var alg = new DerData();
-            alg.Write(_oid);
-            alg.WriteNull();
-
-            var data = new DerData();
-            data.Write(alg);
-            data.Write(hashData);
-            return data.Encode();
-        }
+      this._cipher = cipher != null ? cipher : throw new ArgumentNullException(nameof (cipher));
+      this._oid = oid;
     }
+
+    public override bool Verify(byte[] input, byte[] signature)
+    {
+      byte[] right = this._cipher.Decrypt(signature);
+      return this.DerEncode(this.Hash(input)).IsEqualTo(right);
+    }
+
+    public override byte[] Sign(byte[] input) => this._cipher.Encrypt(this.DerEncode(this.Hash(input))).TrimLeadingZeros();
+
+    protected abstract byte[] Hash(byte[] input);
+
+    protected byte[] DerEncode(byte[] hashData)
+    {
+      DerData data = new DerData();
+      data.Write(this._oid);
+      data.WriteNull();
+      DerData derData = new DerData();
+      derData.Write(data);
+      derData.Write(hashData);
+      return derData.Encode();
+    }
+  }
 }

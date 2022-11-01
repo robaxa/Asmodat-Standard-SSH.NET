@@ -1,24 +1,19 @@
-﻿namespace Renci.SshNet.Common
-{
-    /// <summary>
-    /// Provides data for <see cref="Renci.SshNet.Channels.Channel.ExtendedDataReceived"/> events.
-    /// </summary>
-    internal class ChannelExtendedDataEventArgs : ChannelDataEventArgs
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelExtendedDataEventArgs"/> class.
-        /// </summary>
-        /// <param name="channelNumber">Channel number.</param>
-        /// <param name="data">Channel data.</param>
-        /// <param name="dataTypeCode">Channel data type code.</param>
-        public ChannelExtendedDataEventArgs(uint channelNumber, byte[] data, uint dataTypeCode) : base(channelNumber, data)
-        {
-            DataTypeCode = dataTypeCode;
-        }
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.ChannelExtendedDataEventArgs
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
 
-        /// <summary>
-        /// Gets the data type code.
-        /// </summary>
-        public uint DataTypeCode { get; private set; }
+namespace Renci.SshNet.Common
+{
+  internal class ChannelExtendedDataEventArgs : ChannelDataEventArgs
+  {
+    public ChannelExtendedDataEventArgs(uint channelNumber, byte[] data, uint dataTypeCode)
+      : base(channelNumber, data)
+    {
+      this.DataTypeCode = dataTypeCode;
     }
+
+    public uint DataTypeCode { get; private set; }
+  }
 }

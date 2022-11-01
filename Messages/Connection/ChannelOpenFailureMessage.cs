@@ -1,121 +1,76 @@
-﻿namespace Renci.SshNet.Messages.Connection
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Connection.ChannelOpenFailureMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
+
+namespace Renci.SshNet.Messages.Connection
 {
-    /// <summary>
-    /// Represents SSH_MSG_CHANNEL_OPEN_FAILURE message.
-    /// </summary>
-    [Message("SSH_MSG_CHANNEL_OPEN_FAILURE", 92)]
-    public class ChannelOpenFailureMessage : ChannelMessage
+  [Message("SSH_MSG_CHANNEL_OPEN_FAILURE", 92)]
+  public class ChannelOpenFailureMessage : ChannelMessage
+  {
+    internal const uint AdministrativelyProhibited = 1;
+    internal const uint ConnectFailed = 2;
+    internal const uint UnknownChannelType = 3;
+    internal const uint ResourceShortage = 4;
+    private byte[] _description;
+    private byte[] _language;
+
+    public uint ReasonCode { get; private set; }
+
+    public string Description
     {
-        internal const uint AdministrativelyProhibited = 1;
-        internal const uint ConnectFailed = 2;
-        internal const uint UnknownChannelType = 3;
-        internal const uint ResourceShortage = 4;
-
-        private byte[] _description;
-        private byte[] _language;
-
-        /// <summary>
-        /// Gets failure reason code.
-        /// </summary>
-        public uint ReasonCode { get; private set; }
-
-        /// <summary>
-        /// Gets description for failure.
-        /// </summary>
-        public string Description
-        {
-            get { return Utf8.GetString(_description, 0, _description.Length); }
-            private set { _description = Utf8.GetBytes(value); }
-        }
-
-        /// <summary>
-        /// Gets message language.
-        /// </summary>
-        public string Language
-        {
-            get { return Utf8.GetString(_language, 0, _language.Length); }
-            private set { _language = Utf8.GetBytes(value); }
-        }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // ReasonCode
-                capacity += 4; // Description length
-                capacity += _description.Length; // Description
-                capacity += 4; // Language length
-                capacity += _language.Length; // Language
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelOpenFailureMessage"/> class.
-        /// </summary>
-        public ChannelOpenFailureMessage()
-        {
-
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelOpenFailureMessage"/> class.
-        /// </summary>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        /// <param name="description">The description.</param>
-        /// <param name="reasonCode">The reason code.</param>
-        public ChannelOpenFailureMessage(uint localChannelNumber, string description, uint reasonCode)
-            : this(localChannelNumber, description, reasonCode, "en")
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelOpenFailureMessage"/> class.
-        /// </summary>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        /// <param name="description">The description.</param>
-        /// <param name="reasonCode">The reason code.</param>
-        /// <param name="language">The language (RFC3066).</param>
-        public ChannelOpenFailureMessage(uint localChannelNumber, string description, uint reasonCode, string language)
-            : base(localChannelNumber)
-        {
-            Description = description;
-            ReasonCode = reasonCode;
-            Language = language;
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            base.LoadData();
-            ReasonCode = ReadUInt32();
-            _description = ReadBinary();
-            _language = ReadBinary();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            base.SaveData();
-            Write(ReasonCode);
-            WriteBinaryString(_description);
-            WriteBinaryString(_language);
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnChannelOpenFailureReceived(this);
-        }
+      get => SshData.Utf8.GetString(this._description, 0, this._description.Length);
+      private set => this._description = SshData.Utf8.GetBytes(value);
     }
+
+    public string Language
+    {
+      get => SshData.Utf8.GetString(this._language, 0, this._language.Length);
+      private set => this._language = SshData.Utf8.GetBytes(value);
+    }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + 4 + this._description.Length + 4 + this._language.Length;
+
+    public ChannelOpenFailureMessage()
+    {
+    }
+
+    public ChannelOpenFailureMessage(uint localChannelNumber, string description, uint reasonCode)
+      : this(localChannelNumber, description, reasonCode, "en")
+    {
+    }
+
+    public ChannelOpenFailureMessage(
+      uint localChannelNumber,
+      string description,
+      uint reasonCode,
+      string language)
+      : base(localChannelNumber)
+    {
+      this.Description = description;
+      this.ReasonCode = reasonCode;
+      this.Language = language;
+    }
+
+    protected override void LoadData()
+    {
+      base.LoadData();
+      this.ReasonCode = this.ReadUInt32();
+      this._description = this.ReadBinary();
+      this._language = this.ReadBinary();
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.Write(this.ReasonCode);
+      this.WriteBinaryString(this._description);
+      this.WriteBinaryString(this._language);
+    }
+
+    internal override void Process(Session session) => session.OnChannelOpenFailureReceived(this);
+  }
 }

@@ -1,130 +1,98 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Channels.ClientChannel
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using Renci.SshNet.Messages;
 using Renci.SshNet.Messages.Connection;
+using System;
 
 namespace Renci.SshNet.Channels
 {
-    internal abstract class ClientChannel : Channel
+  internal abstract class ClientChannel : Channel
+  {
+    protected ClientChannel(
+      ISession session,
+      uint localChannelNumber,
+      uint localWindowSize,
+      uint localPacketSize)
+      : base(session, localChannelNumber, localWindowSize, localPacketSize)
     {
-        /// <summary>
-        /// Initializes a new <see cref="ClientChannel"/> instance.
-        /// </summary>
-        /// <param name="session">The session.</param>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        /// <param name="localWindowSize">Size of the window.</param>
-        /// <param name="localPacketSize">Size of the packet.</param>
-        protected ClientChannel(ISession session, uint localChannelNumber, uint localWindowSize, uint localPacketSize)
-            : base(session, localChannelNumber, localWindowSize, localPacketSize)
-        {
-            session.ChannelOpenConfirmationReceived += OnChannelOpenConfirmation;
-            session.ChannelOpenFailureReceived += OnChannelOpenFailure;
-        }
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelOpenConfirmationMessage"/> is received.
-        /// </summary>
-        public event EventHandler<ChannelOpenConfirmedEventArgs> OpenConfirmed;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelOpenFailureMessage"/> is received.
-        /// </summary>
-        public event EventHandler<ChannelOpenFailedEventArgs> OpenFailed;
-
-        /// <summary>
-        /// Called when channel is opened by the server.
-        /// </summary>
-        /// <param name="remoteChannelNumber">The remote channel number.</param>
-        /// <param name="initialWindowSize">Initial size of the window.</param>
-        /// <param name="maximumPacketSize">Maximum size of the packet.</param>
-        protected virtual void OnOpenConfirmation(uint remoteChannelNumber, uint initialWindowSize, uint maximumPacketSize)
-        {
-            InitializeRemoteInfo(remoteChannelNumber, initialWindowSize, maximumPacketSize);
-
-            // Channel is consider to be open when confirmation message was received
-            IsOpen = true;
-
-            var openConfirmed = OpenConfirmed;
-            if (openConfirmed != null)
-                openConfirmed(this, new ChannelOpenConfirmedEventArgs(remoteChannelNumber, initialWindowSize, maximumPacketSize));
-        }
-
-        /// <summary>
-        /// Send message to open a channel.
-        /// </summary>
-        /// <param name="message">Message to send</param>
-        /// <exception cref="SshConnectionException">The client is not connected.</exception>
-        /// <exception cref="SshOperationTimeoutException">The operation timed out.</exception>
-        /// <exception cref="InvalidOperationException">The size of the packet exceeds the maximum size defined by the protocol.</exception>
-        protected void SendMessage(ChannelOpenMessage message)
-        {
-            Session.SendMessage(message);
-        }
-
-        /// <summary>
-        /// Called when channel failed to open.
-        /// </summary>
-        /// <param name="reasonCode">The reason code.</param>
-        /// <param name="description">The description.</param>
-        /// <param name="language">The language.</param>
-        protected virtual void OnOpenFailure(uint reasonCode, string description, string language)
-        {
-            var openFailed = OpenFailed;
-            if (openFailed != null)
-                openFailed(this, new ChannelOpenFailedEventArgs(LocalChannelNumber, reasonCode, description, language));
-        }
-
-        private void OnChannelOpenConfirmation(object sender, MessageEventArgs<ChannelOpenConfirmationMessage> e)
-        {
-            if (e.Message.LocalChannelNumber == LocalChannelNumber)
-            {
-                try
-                {
-                    OnOpenConfirmation(e.Message.RemoteChannelNumber, e.Message.InitialWindowSize,
-                        e.Message.MaximumPacketSize);
-                }
-                catch (Exception ex)
-                {
-                    OnChannelException(ex);
-                }
-            }
-        }
-
-        private void OnChannelOpenFailure(object sender, MessageEventArgs<ChannelOpenFailureMessage> e)
-        {
-            if (e.Message.LocalChannelNumber == LocalChannelNumber)
-            {
-                try
-                {
-                    OnOpenFailure(e.Message.ReasonCode, e.Message.Description, e.Message.Language);
-                }
-                catch (Exception ex)
-                {
-                    OnChannelException(ex);
-                }
-            }
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            UnsubscribeFromSessionEvents(Session);
-
-            base.Dispose(disposing);
-        }
-
-        /// <summary>
-        /// Unsubscribes the current <see cref="ClientChannel"/> from session events.
-        /// </summary>
-        /// <param name="session">The session.</param>
-        /// <remarks>
-        /// Does nothing when <paramref name="session"/> is <c>null</c>.
-        /// </remarks>
-        private void UnsubscribeFromSessionEvents(ISession session)
-        {
-            if (session == null)
-                return;
-
-            session.ChannelOpenConfirmationReceived -= OnChannelOpenConfirmation;
-            session.ChannelOpenFailureReceived -= OnChannelOpenFailure;
-        }
+      session.ChannelOpenConfirmationReceived += new EventHandler<MessageEventArgs<ChannelOpenConfirmationMessage>>(this.OnChannelOpenConfirmation);
+      session.ChannelOpenFailureReceived += new EventHandler<MessageEventArgs<ChannelOpenFailureMessage>>(this.OnChannelOpenFailure);
     }
+
+    public event EventHandler<ChannelOpenConfirmedEventArgs> OpenConfirmed;
+
+    public event EventHandler<ChannelOpenFailedEventArgs> OpenFailed;
+
+    protected virtual void OnOpenConfirmation(
+      uint remoteChannelNumber,
+      uint initialWindowSize,
+      uint maximumPacketSize)
+    {
+      this.InitializeRemoteInfo(remoteChannelNumber, initialWindowSize, maximumPacketSize);
+      this.IsOpen = true;
+      EventHandler<ChannelOpenConfirmedEventArgs> openConfirmed = this.OpenConfirmed;
+      if (openConfirmed == null)
+        return;
+      openConfirmed((object) this, new ChannelOpenConfirmedEventArgs(remoteChannelNumber, initialWindowSize, maximumPacketSize));
+    }
+
+    protected void SendMessage(ChannelOpenMessage message) => this.Session.SendMessage((Message) message);
+
+    protected virtual void OnOpenFailure(uint reasonCode, string description, string language)
+    {
+      EventHandler<ChannelOpenFailedEventArgs> openFailed = this.OpenFailed;
+      if (openFailed == null)
+        return;
+      openFailed((object) this, new ChannelOpenFailedEventArgs(this.LocalChannelNumber, reasonCode, description, language));
+    }
+
+    private void OnChannelOpenConfirmation(
+      object sender,
+      MessageEventArgs<ChannelOpenConfirmationMessage> e)
+    {
+      if ((int) e.Message.LocalChannelNumber != (int) this.LocalChannelNumber)
+        return;
+      try
+      {
+        this.OnOpenConfirmation(e.Message.RemoteChannelNumber, e.Message.InitialWindowSize, e.Message.MaximumPacketSize);
+      }
+      catch (Exception ex)
+      {
+        this.OnChannelException(ex);
+      }
+    }
+
+    private void OnChannelOpenFailure(object sender, MessageEventArgs<ChannelOpenFailureMessage> e)
+    {
+      if ((int) e.Message.LocalChannelNumber != (int) this.LocalChannelNumber)
+        return;
+      try
+      {
+        this.OnOpenFailure(e.Message.ReasonCode, e.Message.Description, e.Message.Language);
+      }
+      catch (Exception ex)
+      {
+        this.OnChannelException(ex);
+      }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+      this.UnsubscribeFromSessionEvents(this.Session);
+      base.Dispose(disposing);
+    }
+
+    private void UnsubscribeFromSessionEvents(ISession session)
+    {
+      if (session == null)
+        return;
+      session.ChannelOpenConfirmationReceived -= new EventHandler<MessageEventArgs<ChannelOpenConfirmationMessage>>(this.OnChannelOpenConfirmation);
+      session.ChannelOpenFailureReceived -= new EventHandler<MessageEventArgs<ChannelOpenFailureMessage>>(this.OnChannelOpenFailure);
+    }
+  }
 }

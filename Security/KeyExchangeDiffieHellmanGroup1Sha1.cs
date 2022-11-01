@@ -1,48 +1,150 @@
-﻿using Renci.SshNet.Common;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.KeyExchangeDiffieHellmanGroup1Sha1
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
 
 namespace Renci.SshNet.Security
 {
-    /// <summary>
-    /// Represents "diffie-hellman-group1-sha1" algorithm implementation.
-    /// </summary>
-    internal class KeyExchangeDiffieHellmanGroup1Sha1 : KeyExchangeDiffieHellmanGroupSha1
+  internal class KeyExchangeDiffieHellmanGroup1Sha1 : KeyExchangeDiffieHellmanGroupSha1
+  {
+    private static readonly byte[] SecondOkleyGroupReversed = new byte[129]
     {
-        private static readonly byte[] SecondOkleyGroupReversed =
-            {
-                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x81, 0x53, 0xe6, 0xec,
-                0x51, 0x66, 0x28, 0x49, 0xe6, 0x1f, 0x4b, 0x7c, 0x11, 0x24, 0x9f, 0xae,
-                0xa5, 0x9f, 0x89, 0x5a, 0xfb, 0x6b, 0x38, 0xee, 0xed, 0xb7, 0x06, 0xf4,
-                0xb6, 0x5c, 0xff, 0x0b, 0x6b, 0xed, 0x37, 0xa6, 0xe9, 0x42, 0x4c, 0xf4,
-                0xc6, 0x7e, 0x5e, 0x62, 0x76, 0xb5, 0x85, 0xe4, 0x45, 0xc2, 0x51, 0x6d,
-                0x6d, 0x35, 0xe1, 0x4f, 0x37, 0x14, 0x5f, 0xf2, 0x6d, 0x0a, 0x2b, 0x30,
-                0x1b, 0x43, 0x3a, 0xcd, 0xb3, 0x19, 0x95, 0xef, 0xdd, 0x04, 0x34, 0x8e,
-                0x79, 0x08, 0x4a, 0x51, 0x22, 0x9b, 0x13, 0x3b, 0xa6, 0xbe, 0x0b, 0x02,
-                0x74, 0xcc, 0x67, 0x8a, 0x08, 0x4e, 0x02, 0x29, 0xd1, 0x1c, 0xdc, 0x80,
-                0x8b, 0x62, 0xc6, 0xc4, 0x34, 0xc2, 0x68, 0x21, 0xa2, 0xda, 0x0f, 0xc9,
-                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                0x00
-            };
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      (byte) 129,
+      (byte) 83,
+      (byte) 230,
+      (byte) 236,
+      (byte) 81,
+      (byte) 102,
+      (byte) 40,
+      (byte) 73,
+      (byte) 230,
+      (byte) 31,
+      (byte) 75,
+      (byte) 124,
+      (byte) 17,
+      (byte) 36,
+      (byte) 159,
+      (byte) 174,
+      (byte) 165,
+      (byte) 159,
+      (byte) 137,
+      (byte) 90,
+      (byte) 251,
+      (byte) 107,
+      (byte) 56,
+      (byte) 238,
+      (byte) 237,
+      (byte) 183,
+      (byte) 6,
+      (byte) 244,
+      (byte) 182,
+      (byte) 92,
+      byte.MaxValue,
+      (byte) 11,
+      (byte) 107,
+      (byte) 237,
+      (byte) 55,
+      (byte) 166,
+      (byte) 233,
+      (byte) 66,
+      (byte) 76,
+      (byte) 244,
+      (byte) 198,
+      (byte) 126,
+      (byte) 94,
+      (byte) 98,
+      (byte) 118,
+      (byte) 181,
+      (byte) 133,
+      (byte) 228,
+      (byte) 69,
+      (byte) 194,
+      (byte) 81,
+      (byte) 109,
+      (byte) 109,
+      (byte) 53,
+      (byte) 225,
+      (byte) 79,
+      (byte) 55,
+      (byte) 20,
+      (byte) 95,
+      (byte) 242,
+      (byte) 109,
+      (byte) 10,
+      (byte) 43,
+      (byte) 48,
+      (byte) 27,
+      (byte) 67,
+      (byte) 58,
+      (byte) 205,
+      (byte) 179,
+      (byte) 25,
+      (byte) 149,
+      (byte) 239,
+      (byte) 221,
+      (byte) 4,
+      (byte) 52,
+      (byte) 142,
+      (byte) 121,
+      (byte) 8,
+      (byte) 74,
+      (byte) 81,
+      (byte) 34,
+      (byte) 155,
+      (byte) 19,
+      (byte) 59,
+      (byte) 166,
+      (byte) 190,
+      (byte) 11,
+      (byte) 2,
+      (byte) 116,
+      (byte) 204,
+      (byte) 103,
+      (byte) 138,
+      (byte) 8,
+      (byte) 78,
+      (byte) 2,
+      (byte) 41,
+      (byte) 209,
+      (byte) 28,
+      (byte) 220,
+      (byte) 128,
+      (byte) 139,
+      (byte) 98,
+      (byte) 198,
+      (byte) 196,
+      (byte) 52,
+      (byte) 194,
+      (byte) 104,
+      (byte) 33,
+      (byte) 162,
+      (byte) 218,
+      (byte) 15,
+      (byte) 201,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      byte.MaxValue,
+      (byte) 0
+    };
 
-        /// <summary>
-        /// Gets algorithm name.
-        /// </summary>
-        public override string Name
-        {
-            get { return "diffie-hellman-group1-sha1"; }
-        }
+    public override string Name => "diffie-hellman-group1-sha1";
 
-        /// <summary>
-        /// Gets the group prime.
-        /// </summary>
-        /// <value>
-        /// The group prime.
-        /// </value>
-        public override BigInteger GroupPrime
-        {
-            get
-            {
-                return new BigInteger(SecondOkleyGroupReversed);
-            }
-        }
-    }
+    public override BigInteger GroupPrime => new BigInteger(KeyExchangeDiffieHellmanGroup1Sha1.SecondOkleyGroupReversed);
+  }
 }

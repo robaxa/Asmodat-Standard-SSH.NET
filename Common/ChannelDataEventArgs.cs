@@ -1,24 +1,19 @@
-﻿namespace Renci.SshNet.Common
-{
-    /// <summary>
-    /// Provides data for <see cref="Renci.SshNet.Channels.Channel.DataReceived"/> event.
-    /// </summary>
-    internal class ChannelDataEventArgs : ChannelEventArgs
-    {
-        /// <summary>
-        /// Gets channel data.
-        /// </summary>
-        public byte[] Data { get; private set; }
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.ChannelDataEventArgs
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelDataEventArgs"/> class.
-        /// </summary>
-        /// <param name="channelNumber">Channel number.</param>
-        /// <param name="data">Channel data.</param>
-        public ChannelDataEventArgs(uint channelNumber, byte[] data)
-            : base(channelNumber)
-        {
-            Data = data;
-        }
+namespace Renci.SshNet.Common
+{
+  internal class ChannelDataEventArgs : ChannelEventArgs
+  {
+    public byte[] Data { get; private set; }
+
+    public ChannelDataEventArgs(uint channelNumber, byte[] data)
+      : base(channelNumber)
+    {
+      this.Data = data;
     }
+  }
 }

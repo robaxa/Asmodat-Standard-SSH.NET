@@ -1,140 +1,70 @@
-﻿using System;
-using System.Text;
-using Renci.SshNet.Messages.Transport;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.KeyExchangeDiffieHellman
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using Renci.SshNet.Messages.Transport;
+using System;
+using System.Text;
 
 namespace Renci.SshNet.Security
 {
-    /// <summary>
-    /// Represents base class for Diffie Hellman key exchange algorithm
-    /// </summary>
-    internal abstract class KeyExchangeDiffieHellman : KeyExchange
+  internal abstract class KeyExchangeDiffieHellman : KeyExchange
+  {
+    protected BigInteger _group;
+    protected BigInteger _prime;
+    protected byte[] _clientPayload;
+    protected byte[] _serverPayload;
+    protected BigInteger _clientExchangeValue;
+    protected BigInteger _serverExchangeValue;
+    protected BigInteger _privateExponent;
+    protected byte[] _hostKey;
+    protected byte[] _signature;
+
+    protected abstract int HashSize { get; }
+
+    protected override bool ValidateExchangeHash()
     {
-        /// <summary>
-        /// Specifies key exchange group number.
-        /// </summary>
-        protected BigInteger _group;
-
-        /// <summary>
-        /// Specifies key exchange prime number.
-        /// </summary>
-        protected BigInteger _prime;
-
-        /// <summary>
-        /// Specifies client payload
-        /// </summary>
-        protected byte[] _clientPayload;
-
-        /// <summary>
-        /// Specifies server payload
-        /// </summary>
-        protected byte[] _serverPayload;
-
-        /// <summary>
-        /// Specifies client exchange number.
-        /// </summary>
-        protected BigInteger _clientExchangeValue;
-
-        /// <summary>
-        /// Specifies server exchange number.
-        /// </summary>
-        protected BigInteger _serverExchangeValue;
-
-        /// <summary>
-        /// Specifies random generated number.
-        /// </summary>
-        protected BigInteger _privateExponent;
-
-        /// <summary>
-        /// Specifies host key data.
-        /// </summary>
-        protected byte[] _hostKey;
-
-        /// <summary>
-        /// Specifies signature data.
-        /// </summary>
-        protected byte[] _signature;
-
-        /// <summary>
-        /// Gets the size, in bits, of the computed hash code.
-        /// </summary>
-        /// <value>
-        /// The size, in bits, of the computed hash code.
-        /// </value>
-        protected abstract int HashSize { get; }
-
-        /// <summary>
-        /// Validates the exchange hash.
-        /// </summary>
-        /// <returns>
-        /// true if exchange hash is valid; otherwise false.
-        /// </returns>
-        protected override bool ValidateExchangeHash()
-        {
-            var exchangeHash = CalculateHash();
-
-            var length = Pack.BigEndianToUInt32(_hostKey);
-            var algorithmName = Encoding.UTF8.GetString(_hostKey, 4, (int)length);
-            var key = Session.ConnectionInfo.HostKeyAlgorithms[algorithmName](_hostKey);
-
-            Session.ConnectionInfo.CurrentHostKeyAlgorithm = algorithmName;
-
-            if (CanTrustHostKey(key))
-            {
-                return key.VerifySignature(exchangeHash, _signature);
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Starts key exchange algorithm
-        /// </summary>
-        /// <param name="session">The session.</param>
-        /// <param name="message">Key exchange init message.</param>
-        public override void Start(Session session, KeyExchangeInitMessage message)
-        {
-            base.Start(session, message);
-
-            _serverPayload = message.GetBytes();
-            _clientPayload = Session.ClientInitMessage.GetBytes();
-        }
-
-        /// <summary>
-        /// Populates the client exchange value.
-        /// </summary>
-        protected void PopulateClientExchangeValue()
-        {
-            if (_group.IsZero)
-                throw new ArgumentNullException("_group");
-
-            if (_prime.IsZero)
-                throw new ArgumentNullException("_prime");
-
-            // generate private exponent that is twice the hash size (RFC 4419) with a minimum
-            // of 1024 bits (whatever is less)
-            var privateExponentSize = Math.Max(HashSize * 2, 1024);
-
-            do
-            {
-                // create private component
-                _privateExponent = BigInteger.Random(privateExponentSize);
-                // generate public component
-                _clientExchangeValue = BigInteger.ModPow(_group, _privateExponent, _prime);
-            } while (_clientExchangeValue < 1 || _clientExchangeValue > (_prime - 1));
-        }
-
-        /// <summary>
-        /// Handles the server DH reply message.
-        /// </summary>
-        /// <param name="hostKey">The host key.</param>
-        /// <param name="serverExchangeValue">The server exchange value.</param>
-        /// <param name="signature">The signature.</param>
-        protected virtual void HandleServerDhReply(byte[] hostKey, BigInteger serverExchangeValue, byte[] signature)
-        {
-            _serverExchangeValue = serverExchangeValue;
-            _hostKey = hostKey;
-            SharedKey = BigInteger.ModPow(serverExchangeValue, _privateExponent, _prime);
-            _signature = signature;
-        }
+      byte[] hash = this.CalculateHash();
+      string key = Encoding.UTF8.GetString(this._hostKey, 4, (int) Pack.BigEndianToUInt32(this._hostKey));
+      KeyHostAlgorithm host = this.Session.ConnectionInfo.HostKeyAlgorithms[key](this._hostKey);
+      this.Session.ConnectionInfo.CurrentHostKeyAlgorithm = key;
+      return this.CanTrustHostKey(host) && host.VerifySignature(hash, this._signature);
     }
+
+    public override void Start(Session session, KeyExchangeInitMessage message)
+    {
+      base.Start(session, message);
+      this._serverPayload = message.GetBytes();
+      this._clientPayload = this.Session.ClientInitMessage.GetBytes();
+    }
+
+    protected void PopulateClientExchangeValue()
+    {
+      if (this._group.IsZero)
+        throw new ArgumentNullException("_group");
+      if (this._prime.IsZero)
+        throw new ArgumentNullException("_prime");
+      int bitLength = Math.Max(this.HashSize * 2, 1024);
+      do
+      {
+        this._privateExponent = BigInteger.Random(bitLength);
+        this._clientExchangeValue = BigInteger.ModPow(this._group, this._privateExponent, this._prime);
+      }
+      while (this._clientExchangeValue < 1L || this._clientExchangeValue > this._prime - (BigInteger) 1);
+    }
+
+    protected virtual void HandleServerDhReply(
+      byte[] hostKey,
+      BigInteger serverExchangeValue,
+      byte[] signature)
+    {
+      this._serverExchangeValue = serverExchangeValue;
+      this._hostKey = hostKey;
+      this.SharedKey = BigInteger.ModPow(serverExchangeValue, this._privateExponent, this._prime);
+      this._signature = signature;
+    }
+  }
 }

@@ -1,33 +1,17 @@
-﻿namespace Renci.SshNet
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.IAuthenticationMethod
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet
 {
-    /// <summary>
-    /// Base interface for authentication of a session using a given method.
-    /// </summary>
-    internal interface IAuthenticationMethod
-    {
-        /// <summary>
-        /// Authenticates the specified session.
-        /// </summary>
-        /// <param name="session">The session to authenticate.</param>
-        /// <returns>
-        /// The result of the authentication process.
-        /// </returns>
-        AuthenticationResult Authenticate(ISession session);
+  internal interface IAuthenticationMethod
+  {
+    AuthenticationResult Authenticate(ISession session);
 
-        /// <summary>
-        /// Gets the list of allowed authentications.
-        /// </summary>
-        /// <value>
-        /// The list of allowed authentications.
-        /// </value>
-        string[] AllowedAuthentications { get; }
+    string[] AllowedAuthentications { get; }
 
-        /// <summary>
-        /// Gets the name of the authentication method.
-        /// </summary>
-        /// <value>
-        /// The name of the authentication method.
-        /// </value>
-        string Name { get; }
-    }
+    string Name { get; }
+  }
 }

@@ -1,39 +1,24 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.MessageAttribute
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Messages
 {
+  [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
+  public sealed class MessageAttribute : Attribute
+  {
+    public string Name { get; set; }
 
-    /// <summary>
-    /// Indicates that a class represents SSH message. This class cannot be inherited.
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Class, Inherited = true, AllowMultiple = false)]
-    public sealed class MessageAttribute : Attribute
+    public byte Number { get; set; }
+
+    public MessageAttribute(string name, byte number)
     {
-        /// <summary>
-        /// Gets or sets message name as defined in RFC 4250.
-        /// </summary>
-        /// <value>
-        /// The name.
-        /// </value>
-        public string Name { get; set; }
-
-        /// <summary>
-        /// Gets or sets message number as defined in RFC 4250.
-        /// </summary>
-        /// <value>
-        /// The number.
-        /// </value>
-        public byte Number { get; set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="MessageAttribute"/> class.
-        /// </summary>
-        /// <param name="name">The name.</param>
-        /// <param name="number">The number.</param>
-        public MessageAttribute(string name, byte number)
-        {
-            Name = name;
-            Number = number;
-        }
+      this.Name = name;
+      this.Number = number;
     }
+  }
 }

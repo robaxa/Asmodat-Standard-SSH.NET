@@ -1,15 +1,15 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.IForwardedPort
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet
 {
-    /// <summary>
-    /// Supports port forwarding functionality.
-    /// </summary>
-    public interface IForwardedPort
-    {
-        /// <summary>
-        /// The <see cref="Closing"/> event occurs as the forwarded port is being stopped.
-        /// </summary>
-        event EventHandler Closing;
-    }
+  public interface IForwardedPort
+  {
+    event EventHandler Closing;
+  }
 }

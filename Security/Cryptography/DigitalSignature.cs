@@ -1,23 +1,15 @@
-﻿namespace Renci.SshNet.Security.Cryptography
-{
-    /// <summary>
-    /// Base class for signature implementations
-    /// </summary>
-    public abstract class DigitalSignature
-    {
-        /// <summary>
-        /// Verifies the signature.
-        /// </summary>
-        /// <param name="input">The input.</param>
-        /// <param name="signature">The signature.</param>
-        /// <returns><c>True</c> if signature was successfully verified; otherwise <c>false</c>.</returns>
-        public abstract bool Verify(byte[] input, byte[] signature);
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.Cryptography.DigitalSignature
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
 
-        /// <summary>
-        /// Creates the signature.
-        /// </summary>
-        /// <param name="input">The input.</param>
-        /// <returns>Signed input data.</returns>
-        public abstract byte[] Sign(byte[] input);
-    }
+namespace Renci.SshNet.Security.Cryptography
+{
+  public abstract class DigitalSignature
+  {
+    public abstract bool Verify(byte[] input, byte[] signature);
+
+    public abstract byte[] Sign(byte[] input);
+  }
 }

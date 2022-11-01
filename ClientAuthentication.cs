@@ -1,290 +1,177 @@
-﻿using System;
-using System.Collections.Generic;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.ClientAuthentication
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using Renci.SshNet.Messages.Authentication;
+using System;
+using System.Collections.Generic;
 
 namespace Renci.SshNet
 {
-    internal class ClientAuthentication : IClientAuthentication
+  internal class ClientAuthentication : IClientAuthentication
+  {
+    private readonly int _partialSuccessLimit;
+
+    public ClientAuthentication(int partialSuccessLimit) => this._partialSuccessLimit = partialSuccessLimit >= 1 ? partialSuccessLimit : throw new ArgumentOutOfRangeException(nameof (partialSuccessLimit), "Cannot be less than one.");
+
+    internal int PartialSuccessLimit => this._partialSuccessLimit;
+
+    public void Authenticate(IConnectionInfoInternal connectionInfo, ISession session)
     {
-        private readonly int _partialSuccessLimit;
-
-        /// <summary>
-        /// Initializes a new <see cref="ClientAuthentication"/> instance.
-        /// </summary>
-        /// <param name="partialSuccessLimit">The number of times an authentication attempt with any given <see cref="IAuthenticationMethod"/> can result in <see cref="AuthenticationResult.PartialSuccess"/> before it is disregarded.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="partialSuccessLimit"/> is less than one.</exception>
-        public ClientAuthentication(int partialSuccessLimit)
-        {
-            if (partialSuccessLimit < 1)
-                throw new ArgumentOutOfRangeException("partialSuccessLimit", "Cannot be less than one.");
-
-            _partialSuccessLimit = partialSuccessLimit;
-        }
-
-        /// <summary>
-        /// Gets the number of times an authentication attempt with any given <see cref="IAuthenticationMethod"/> can
-        /// result in <see cref="AuthenticationResult.PartialSuccess"/> before it is disregarded.
-        /// </summary>
-        /// <value>
-        /// The number of times an authentication attempt with any given <see cref="IAuthenticationMethod"/> can result
-        /// in <see cref="AuthenticationResult.PartialSuccess"/> before it is disregarded.
-        /// </value>
-        internal int PartialSuccessLimit
-        {
-            get { return _partialSuccessLimit; }
-        }
-
-        /// <summary>
-        /// Attempts to authentication for a given <see cref="ISession"/> using the <see cref="IConnectionInfoInternal.AuthenticationMethods"/>
-        /// of the specified <see cref="IConnectionInfoInternal"/>.
-        /// </summary>
-        /// <param name="connectionInfo">A <see cref="IConnectionInfoInternal"/> to use for authenticating.</param>
-        /// <param name="session">The <see cref="ISession"/> for which to perform authentication.</param>
-        public void Authenticate(IConnectionInfoInternal connectionInfo, ISession session)
-        {
-            if (connectionInfo == null)
-                throw new ArgumentNullException("connectionInfo");
-            if (session == null)
-                throw new ArgumentNullException("session");
-
-            session.RegisterMessage("SSH_MSG_USERAUTH_FAILURE");
-            session.RegisterMessage("SSH_MSG_USERAUTH_SUCCESS");
-            session.RegisterMessage("SSH_MSG_USERAUTH_BANNER");
-            session.UserAuthenticationBannerReceived += connectionInfo.UserAuthenticationBannerReceived;
-
-            try
-            {
-                // the exception to report an authentication failure with
-                SshAuthenticationException authenticationException = null;
-
-                // try to authenticate against none
-                var noneAuthenticationMethod = connectionInfo.CreateNoneAuthenticationMethod();
-
-                var authenticated = noneAuthenticationMethod.Authenticate(session);
-                if (authenticated != AuthenticationResult.Success)
-                {
-                    if (!TryAuthenticate(session, new AuthenticationState(connectionInfo.AuthenticationMethods), noneAuthenticationMethod.AllowedAuthentications, ref authenticationException))
-                    {
-                        throw authenticationException;
-                    }
-                }
-            }
-            finally
-            {
-                session.UserAuthenticationBannerReceived -= connectionInfo.UserAuthenticationBannerReceived;
-                session.UnRegisterMessage("SSH_MSG_USERAUTH_FAILURE");
-                session.UnRegisterMessage("SSH_MSG_USERAUTH_SUCCESS");
-                session.UnRegisterMessage("SSH_MSG_USERAUTH_BANNER");
-            }
-        }
-
-        private bool TryAuthenticate(ISession session,
-                                     AuthenticationState authenticationState,
-                                     string[] allowedAuthenticationMethods,
-                                     ref SshAuthenticationException authenticationException)
-        {
-            if (allowedAuthenticationMethods.Length == 0)
-            {
-                authenticationException = new SshAuthenticationException("No authentication methods defined on SSH server.");
-                return false;
-            }
-
-            // we want to try authentication methods in the order in which they were
-            // passed in the ctor, not the order in which the SSH server returns
-            // the allowed authentication methods
-            var matchingAuthenticationMethods = authenticationState.GetSupportedAuthenticationMethods(allowedAuthenticationMethods);
-            if (matchingAuthenticationMethods.Count == 0)
-            {
-                authenticationException = new SshAuthenticationException(string.Format("No suitable authentication method found to complete authentication ({0}).",
-                                                                                       string.Join(",", allowedAuthenticationMethods)));
-                return false;
-            }
-
-            foreach (var authenticationMethod in authenticationState.GetActiveAuthenticationMethods(matchingAuthenticationMethods))
-            {
-                // guard against a stack overlow for servers that do not update the list of allowed authentication
-                // methods after a partial success
-                if (authenticationState.GetPartialSuccessCount(authenticationMethod) >= _partialSuccessLimit)
-                {
-                    // TODO Get list of all authentication methods that have reached the partial success limit?
-
-                    authenticationException = new SshAuthenticationException(string.Format("Reached authentication attempt limit for method ({0}).",
-                                                                                           authenticationMethod.Name));
-                    continue;
-                }
-
-                var authenticationResult = authenticationMethod.Authenticate(session);
-                switch (authenticationResult)
-                {
-                    case AuthenticationResult.PartialSuccess:
-                        authenticationState.RecordPartialSuccess(authenticationMethod);
-                        if (TryAuthenticate(session, authenticationState, authenticationMethod.AllowedAuthentications, ref authenticationException))
-                        {
-                            authenticationResult = AuthenticationResult.Success;
-                        }
-                        break;
-                    case AuthenticationResult.Failure:
-                        authenticationState.RecordFailure(authenticationMethod);
-                        authenticationException = new SshAuthenticationException(string.Format("Permission denied ({0}).", authenticationMethod.Name));
-                        break;
-                    case AuthenticationResult.Success:
-                        authenticationException = null;
-                        break;
-                }
-
-                if (authenticationResult == AuthenticationResult.Success)
-                    return true;
-            }
-
-            return false;
-        }
-
-        private class AuthenticationState
-        {
-            private readonly IList<IAuthenticationMethod> _supportedAuthenticationMethods;
-
-            /// <summary>
-            /// Records if a given <see cref="IAuthenticationMethod"/> has been tried, and how many times this resulted
-            /// in <see cref="AuthenticationResult.PartialSuccess"/>.
-            /// </summary>
-            /// <remarks>
-            /// When there's no entry for a given <see cref="IAuthenticationMethod"/>, then it was never tried.
-            /// </remarks>
-            private readonly Dictionary<IAuthenticationMethod, int> _authenticationMethodPartialSuccessRegister;
-
-            /// <summary>
-            /// Holds the list of authentications methods that failed.
-            /// </summary>
-            private readonly List<IAuthenticationMethod> _failedAuthenticationMethods;
-
-            public AuthenticationState(IList<IAuthenticationMethod> supportedAuthenticationMethods)
-            {
-                _supportedAuthenticationMethods = supportedAuthenticationMethods;
-                _failedAuthenticationMethods = new List<IAuthenticationMethod>();
-                _authenticationMethodPartialSuccessRegister = new Dictionary<IAuthenticationMethod, int>();
-            }
-
-            /// <summary>
-            /// Records a <see cref="AuthenticationResult.Failure"/> authentication attempt for the specified
-            /// <see cref="IAuthenticationMethod"/> .
-            /// </summary>
-            /// <param name="authenticationMethod">An <see cref="IAuthenticationMethod"/> for which to record the result of an authentication attempt.</param>
-            public void RecordFailure(IAuthenticationMethod authenticationMethod)
-            {
-                _failedAuthenticationMethods.Add(authenticationMethod);
-            }
-
-            /// <summary>
-            /// Records a <see cref="AuthenticationResult.PartialSuccess"/> authentication attempt for the specified
-            /// <see cref="IAuthenticationMethod"/> .
-            /// </summary>
-            /// <param name="authenticationMethod">An <see cref="IAuthenticationMethod"/> for which to record the result of an authentication attempt.</param>
-            public void RecordPartialSuccess(IAuthenticationMethod authenticationMethod)
-            {
-                int partialSuccessCount;
-                if (_authenticationMethodPartialSuccessRegister.TryGetValue(authenticationMethod, out partialSuccessCount))
-                {
-                    _authenticationMethodPartialSuccessRegister[authenticationMethod] = ++partialSuccessCount;
-                }
-                else
-                {
-                    _authenticationMethodPartialSuccessRegister.Add(authenticationMethod, 1);
-                }
-            }
-
-            /// <summary>
-            /// Returns the number of times an authentication attempt with the specified <see cref="IAuthenticationMethod"/>
-            /// has resulted in <see cref="AuthenticationResult.PartialSuccess"/>.
-            /// </summary>
-            /// <param name="authenticationMethod">An <see cref="IAuthenticationMethod"/>.</param>
-            /// <returns>
-            /// The number of times an authentication attempt with the specified <see cref="IAuthenticationMethod"/>
-            /// has resulted in <see cref="AuthenticationResult.PartialSuccess"/>.
-            /// </returns>
-            public int GetPartialSuccessCount(IAuthenticationMethod authenticationMethod)
-            {
-                int partialSuccessCount;
-                if (_authenticationMethodPartialSuccessRegister.TryGetValue(authenticationMethod, out partialSuccessCount))
-                {
-                    return partialSuccessCount;
-                }
-                return 0;
-            }
-
-            /// <summary>
-            /// Returns a list of supported authentication methods that match one of the specified allowed authentication
-            /// methods.
-            /// </summary>
-            /// <param name="allowedAuthenticationMethods">A list of allowed authentication methods.</param>
-            /// <returns>
-            /// A list of supported authentication methods that match one of the specified allowed authentication methods.
-            /// </returns>
-            /// <remarks>
-            /// The authentication methods are returned in the order in which they were specified in the list that was
-            /// used to initialize the current <see cref="AuthenticationState"/> instance.
-            /// </remarks>
-            public List<IAuthenticationMethod> GetSupportedAuthenticationMethods(string[] allowedAuthenticationMethods)
-            {
-                var result = new List<IAuthenticationMethod>();
-
-                foreach (var supportedAuthenticationMethod in _supportedAuthenticationMethods)
-                {
-                    var nameOfSupportedAuthenticationMethod = supportedAuthenticationMethod.Name;
-
-                    for (var i = 0; i < allowedAuthenticationMethods.Length; i++)
-                    {
-                        if (allowedAuthenticationMethods[i] == nameOfSupportedAuthenticationMethod)
-                        {
-                            result.Add(supportedAuthenticationMethod);
-                            break;
-                        }
-                    }
-                }
-
-                return result;
-            }
-
-            /// <summary>
-            /// Returns the authentication methods from the specified list that have not yet failed.
-            /// </summary>
-            /// <param name="matchingAuthenticationMethods">A list of authentication methods.</param>
-            /// <returns>
-            /// The authentication methods from <paramref name="matchingAuthenticationMethods"/> that have not yet failed.
-            /// </returns>
-            /// <remarks>
-            /// <para>
-            /// This method first returns the authentication methods that have not yet been executed, and only then
-            /// returns those for which an authentication attempt resulted in a <see cref="AuthenticationResult.PartialSuccess"/>.
-            /// </para>
-            /// <para>
-            /// Any <see cref="IAuthenticationMethod"/> that has failed is skipped.
-            /// </para>
-            /// </remarks>
-            public IEnumerable<IAuthenticationMethod> GetActiveAuthenticationMethods(List<IAuthenticationMethod> matchingAuthenticationMethods)
-            {
-                var skippedAuthenticationMethods = new List<IAuthenticationMethod>();
-
-                for (var i = 0; i < matchingAuthenticationMethods.Count; i++)
-                {
-                    var authenticationMethod = matchingAuthenticationMethods[i];
-
-                    // skip authentication methods that have already failed
-                    if (_failedAuthenticationMethods.Contains(authenticationMethod))
-                        continue;
-
-                    // delay use of authentication methods that had a PartialSuccess result
-                    if (_authenticationMethodPartialSuccessRegister.ContainsKey(authenticationMethod))
-                    {
-                        skippedAuthenticationMethods.Add(authenticationMethod);
-                        continue;
-                    }
-
-                    yield return authenticationMethod;
-                }
-
-                foreach (var authenticationMethod in skippedAuthenticationMethods)
-                    yield return authenticationMethod;
-            }
-        }
+      if (connectionInfo == null)
+        throw new ArgumentNullException(nameof (connectionInfo));
+      if (session == null)
+        throw new ArgumentNullException(nameof (session));
+      session.RegisterMessage("SSH_MSG_USERAUTH_FAILURE");
+      session.RegisterMessage("SSH_MSG_USERAUTH_SUCCESS");
+      session.RegisterMessage("SSH_MSG_USERAUTH_BANNER");
+      session.UserAuthenticationBannerReceived += new EventHandler<MessageEventArgs<BannerMessage>>(connectionInfo.UserAuthenticationBannerReceived);
+      try
+      {
+        SshAuthenticationException authenticationException = (SshAuthenticationException) null;
+        IAuthenticationMethod authenticationMethod = connectionInfo.CreateNoneAuthenticationMethod();
+        if (authenticationMethod.Authenticate(session) != 0 && !this.TryAuthenticate(session, new ClientAuthentication.AuthenticationState(connectionInfo.AuthenticationMethods), authenticationMethod.AllowedAuthentications, ref authenticationException))
+          throw authenticationException;
+      }
+      finally
+      {
+        session.UserAuthenticationBannerReceived -= new EventHandler<MessageEventArgs<BannerMessage>>(connectionInfo.UserAuthenticationBannerReceived);
+        session.UnRegisterMessage("SSH_MSG_USERAUTH_FAILURE");
+        session.UnRegisterMessage("SSH_MSG_USERAUTH_SUCCESS");
+        session.UnRegisterMessage("SSH_MSG_USERAUTH_BANNER");
+      }
     }
+
+    private bool TryAuthenticate(
+      ISession session,
+      ClientAuthentication.AuthenticationState authenticationState,
+      string[] allowedAuthenticationMethods,
+      ref SshAuthenticationException authenticationException)
+    {
+      if (allowedAuthenticationMethods.Length == 0)
+      {
+        authenticationException = new SshAuthenticationException("No authentication methods defined on SSH server.");
+        return false;
+      }
+      List<IAuthenticationMethod> authenticationMethods = authenticationState.GetSupportedAuthenticationMethods(allowedAuthenticationMethods);
+      if (authenticationMethods.Count == 0)
+      {
+        authenticationException = new SshAuthenticationException(string.Format("No suitable authentication method found to complete authentication ({0}).", (object) string.Join(",", allowedAuthenticationMethods)));
+        return false;
+      }
+      foreach (IAuthenticationMethod authenticationMethod in authenticationState.GetActiveAuthenticationMethods(authenticationMethods))
+      {
+        if (authenticationState.GetPartialSuccessCount(authenticationMethod) >= this._partialSuccessLimit)
+        {
+          authenticationException = new SshAuthenticationException(string.Format("Reached authentication attempt limit for method ({0}).", (object) authenticationMethod.Name));
+        }
+        else
+        {
+          AuthenticationResult authenticationResult = authenticationMethod.Authenticate(session);
+          switch (authenticationResult)
+          {
+            case AuthenticationResult.Success:
+              authenticationException = (SshAuthenticationException) null;
+              break;
+            case AuthenticationResult.PartialSuccess:
+              authenticationState.RecordPartialSuccess(authenticationMethod);
+              if (this.TryAuthenticate(session, authenticationState, authenticationMethod.AllowedAuthentications, ref authenticationException))
+              {
+                authenticationResult = AuthenticationResult.Success;
+                break;
+              }
+              break;
+            case AuthenticationResult.Failure:
+              authenticationState.RecordFailure(authenticationMethod);
+              authenticationException = new SshAuthenticationException(string.Format("Permission denied ({0}).", (object) authenticationMethod.Name));
+              break;
+          }
+          if (authenticationResult == AuthenticationResult.Success)
+            return true;
+        }
+      }
+      return false;
+    }
+
+    private class AuthenticationState
+    {
+      private readonly IList<IAuthenticationMethod> _supportedAuthenticationMethods;
+      private readonly Dictionary<IAuthenticationMethod, int> _authenticationMethodPartialSuccessRegister;
+      private readonly List<IAuthenticationMethod> _failedAuthenticationMethods;
+
+      public AuthenticationState(
+        IList<IAuthenticationMethod> supportedAuthenticationMethods)
+      {
+        this._supportedAuthenticationMethods = supportedAuthenticationMethods;
+        this._failedAuthenticationMethods = new List<IAuthenticationMethod>();
+        this._authenticationMethodPartialSuccessRegister = new Dictionary<IAuthenticationMethod, int>();
+      }
+
+      public void RecordFailure(IAuthenticationMethod authenticationMethod) => this._failedAuthenticationMethods.Add(authenticationMethod);
+
+      public void RecordPartialSuccess(IAuthenticationMethod authenticationMethod)
+      {
+        int num1;
+        if (this._authenticationMethodPartialSuccessRegister.TryGetValue(authenticationMethod, out num1))
+        {
+          int num2;
+          this._authenticationMethodPartialSuccessRegister[authenticationMethod] = num2 = num1 + 1;
+        }
+        else
+          this._authenticationMethodPartialSuccessRegister.Add(authenticationMethod, 1);
+      }
+
+      public int GetPartialSuccessCount(IAuthenticationMethod authenticationMethod)
+      {
+        int num;
+        return this._authenticationMethodPartialSuccessRegister.TryGetValue(authenticationMethod, out num) ? num : 0;
+      }
+
+      public List<IAuthenticationMethod> GetSupportedAuthenticationMethods(
+        string[] allowedAuthenticationMethods)
+      {
+        List<IAuthenticationMethod> authenticationMethods = new List<IAuthenticationMethod>();
+        foreach (IAuthenticationMethod authenticationMethod in (IEnumerable<IAuthenticationMethod>) this._supportedAuthenticationMethods)
+        {
+          string name = authenticationMethod.Name;
+          for (int index = 0; index < allowedAuthenticationMethods.Length; ++index)
+          {
+            if (allowedAuthenticationMethods[index] == name)
+            {
+              authenticationMethods.Add(authenticationMethod);
+              break;
+            }
+          }
+        }
+        return authenticationMethods;
+      }
+
+      public IEnumerable<IAuthenticationMethod> GetActiveAuthenticationMethods(
+        List<IAuthenticationMethod> matchingAuthenticationMethods)
+      {
+        List<IAuthenticationMethod> skippedAuthenticationMethods = new List<IAuthenticationMethod>();
+        for (int i = 0; i < matchingAuthenticationMethods.Count; ++i)
+        {
+          IAuthenticationMethod authenticationMethod = matchingAuthenticationMethods[i];
+          if (!this._failedAuthenticationMethods.Contains(authenticationMethod))
+          {
+            if (this._authenticationMethodPartialSuccessRegister.ContainsKey(authenticationMethod))
+            {
+              skippedAuthenticationMethods.Add(authenticationMethod);
+            }
+            else
+            {
+              yield return authenticationMethod;
+              authenticationMethod = (IAuthenticationMethod) null;
+            }
+          }
+        }
+        foreach (IAuthenticationMethod authenticationMethod in skippedAuthenticationMethods)
+          yield return authenticationMethod;
+      }
+    }
+  }
 }

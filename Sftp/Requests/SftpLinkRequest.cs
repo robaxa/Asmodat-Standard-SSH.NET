@@ -1,83 +1,66 @@
-﻿using Renci.SshNet.Sftp.Responses;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Sftp.Requests.SftpLinkRequest
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
+using Renci.SshNet.Sftp.Responses;
 using System;
 
 namespace Renci.SshNet.Sftp.Requests
 {
-    internal class SftpLinkRequest : SftpRequest
+  internal class SftpLinkRequest : SftpRequest
+  {
+    private byte[] _newLinkPath;
+    private byte[] _existingPath;
+
+    public override SftpMessageTypes SftpMessageType => SftpMessageTypes.Link;
+
+    public string NewLinkPath
     {
-        private byte[] _newLinkPath;
-        private byte[] _existingPath;
-
-        public override SftpMessageTypes SftpMessageType
-        {
-            get { return SftpMessageTypes.Link; }
-        }
-
-        public string NewLinkPath
-        {
-            get { return Utf8.GetString(_newLinkPath, 0, _newLinkPath.Length); }
-            private set { _newLinkPath = Utf8.GetBytes(value); }
-        }
-
-        public string ExistingPath
-        {
-            get { return Utf8.GetString(_existingPath, 0, _existingPath.Length); }
-            private set { _existingPath = Utf8.GetBytes(value); }
-        }
-
-        public bool IsSymLink { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // NewLinkPath length
-                capacity += NewLinkPath.Length; // NewLinkPath
-                capacity += 4; // ExistingPath length
-                capacity += ExistingPath.Length; // ExistingPath
-                capacity += 1; // IsSymLink
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SftpLinkRequest" /> class.
-        /// </summary>
-        /// <param name="protocolVersion">The protocol version.</param>
-        /// <param name="requestId">The request id.</param>
-        /// <param name="newLinkPath">Specifies the path name of the new link to create.</param>
-        /// <param name="existingPath">Specifies the path of a target object to which the newly created link will refer.  In the case of a symbolic link, this path may not exist.</param>
-        /// <param name="isSymLink">if set to <c>false</c> the link should be a hard link, or a second directory entry referring to the same file or directory object.</param>
-        /// <param name="statusAction">The status action.</param>
-        public SftpLinkRequest(uint protocolVersion, uint requestId, string newLinkPath, string existingPath, bool isSymLink, Action<SftpStatusResponse> statusAction)
-            : base(protocolVersion, requestId, statusAction)
-        {
-            NewLinkPath = newLinkPath;
-            ExistingPath = existingPath;
-            IsSymLink = isSymLink;
-        }
-
-        protected override void LoadData()
-        {
-            base.LoadData();
-            _newLinkPath = ReadBinary();
-            _existingPath = ReadBinary();
-            IsSymLink = ReadBoolean();
-        }
-
-        protected override void SaveData()
-        {
-            base.SaveData();
-            WriteBinaryString(_newLinkPath);
-            WriteBinaryString(_existingPath);
-            Write(IsSymLink);
-        }
+      get => SshData.Utf8.GetString(this._newLinkPath, 0, this._newLinkPath.Length);
+      private set => this._newLinkPath = SshData.Utf8.GetBytes(value);
     }
+
+    public string ExistingPath
+    {
+      get => SshData.Utf8.GetString(this._existingPath, 0, this._existingPath.Length);
+      private set => this._existingPath = SshData.Utf8.GetBytes(value);
+    }
+
+    public bool IsSymLink { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this.NewLinkPath.Length + 4 + this.ExistingPath.Length + 1;
+
+    public SftpLinkRequest(
+      uint protocolVersion,
+      uint requestId,
+      string newLinkPath,
+      string existingPath,
+      bool isSymLink,
+      Action<SftpStatusResponse> statusAction)
+      : base(protocolVersion, requestId, statusAction)
+    {
+      this.NewLinkPath = newLinkPath;
+      this.ExistingPath = existingPath;
+      this.IsSymLink = isSymLink;
+    }
+
+    protected override void LoadData()
+    {
+      base.LoadData();
+      this._newLinkPath = this.ReadBinary();
+      this._existingPath = this.ReadBinary();
+      this.IsSymLink = this.ReadBoolean();
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.WriteBinaryString(this._newLinkPath);
+      this.WriteBinaryString(this._existingPath);
+      this.Write(this.IsSymLink);
+    }
+  }
 }

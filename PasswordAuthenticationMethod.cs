@@ -1,208 +1,129 @@
-﻿using System;
-using System.Text;
-using System.Threading;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.PasswordAuthenticationMethod
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Abstractions;
 using Renci.SshNet.Common;
-using Renci.SshNet.Messages.Authentication;
 using Renci.SshNet.Messages;
+using Renci.SshNet.Messages.Authentication;
+using System;
+using System.Text;
+using System.Threading;
 
 namespace Renci.SshNet
 {
-    /// <summary>
-    /// Provides functionality to perform password authentication.
-    /// </summary>
-    public class PasswordAuthenticationMethod : AuthenticationMethod, IDisposable
+  public class PasswordAuthenticationMethod : AuthenticationMethod, IDisposable
+  {
+    private AuthenticationResult _authenticationResult = AuthenticationResult.Failure;
+    private Session _session;
+    private EventWaitHandle _authenticationCompleted = (EventWaitHandle) new AutoResetEvent(false);
+    private Exception _exception;
+    private readonly RequestMessage _requestMessage;
+    private readonly byte[] _password;
+    private bool _isDisposed;
+
+    public override string Name => this._requestMessage.MethodName;
+
+    internal byte[] Password => this._password;
+
+    public event EventHandler<AuthenticationPasswordChangeEventArgs> PasswordExpired;
+
+    public PasswordAuthenticationMethod(string username, string password)
+      : this(username, Encoding.UTF8.GetBytes(password))
     {
-        private AuthenticationResult _authenticationResult = AuthenticationResult.Failure;
-        private Session _session;
-        private EventWaitHandle _authenticationCompleted = new AutoResetEvent(false);
-        private Exception _exception;
-        private readonly RequestMessage _requestMessage;
-        private readonly byte[] _password;
-
-        /// <summary>
-        /// Gets authentication method name
-        /// </summary>
-        public override string Name
-        {
-            get { return _requestMessage.MethodName; }
-        }
-
-        /// <summary>
-        /// Gets the password as a sequence of bytes.
-        /// </summary>
-        /// <value>
-        /// The password as a sequence of bytes.
-        /// </value>
-        internal byte[] Password
-        {
-            get { return _password; }
-        }
-
-        /// <summary>
-        /// Occurs when user's password has expired and needs to be changed.
-        /// </summary>
-        public event EventHandler<AuthenticationPasswordChangeEventArgs> PasswordExpired;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PasswordAuthenticationMethod"/> class.
-        /// </summary>
-        /// <param name="username">The username.</param>
-        /// <param name="password">The password.</param>
-        /// <exception cref="ArgumentException"><paramref name="username"/> is whitespace or <c>null</c>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="password"/> is <c>null</c>.</exception>
-        public PasswordAuthenticationMethod(string username, string password)
-            : this(username, Encoding.UTF8.GetBytes(password))
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PasswordAuthenticationMethod"/> class.
-        /// </summary>
-        /// <param name="username">The username.</param>
-        /// <param name="password">The password.</param>
-        /// <exception cref="ArgumentException"><paramref name="username"/> is whitespace or <c>null</c>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="password"/> is <c>null</c>.</exception>
-        public PasswordAuthenticationMethod(string username, byte[] password)
-            : base(username)
-        {
-            if (password == null)
-                throw new ArgumentNullException("password");
-
-            _password = password;
-            _requestMessage = new RequestMessagePassword(ServiceName.Connection, Username, _password);
-        }
-
-        /// <summary>
-        /// Authenticates the specified session.
-        /// </summary>
-        /// <param name="session">The session to authenticate.</param>
-        /// <returns>
-        /// Result of authentication  process.
-        /// </returns>
-        /// <exception cref="ArgumentNullException"><paramref name="session" /> is <c>null</c>.</exception>
-        public override AuthenticationResult Authenticate(Session session)
-        {
-            if (session == null)
-                throw new ArgumentNullException("session");
-
-            _session = session;
-
-            session.UserAuthenticationSuccessReceived += Session_UserAuthenticationSuccessReceived;
-            session.UserAuthenticationFailureReceived += Session_UserAuthenticationFailureReceived;
-            session.UserAuthenticationPasswordChangeRequiredReceived += Session_UserAuthenticationPasswordChangeRequiredReceived;
-
-            try
-            {
-                session.RegisterMessage("SSH_MSG_USERAUTH_PASSWD_CHANGEREQ");
-                session.SendMessage(_requestMessage);
-                session.WaitOnHandle(_authenticationCompleted);
-            }
-            finally 
-            {
-                session.UnRegisterMessage("SSH_MSG_USERAUTH_PASSWD_CHANGEREQ");
-                session.UserAuthenticationSuccessReceived -= Session_UserAuthenticationSuccessReceived;
-                session.UserAuthenticationFailureReceived -= Session_UserAuthenticationFailureReceived;
-                session.UserAuthenticationPasswordChangeRequiredReceived -= Session_UserAuthenticationPasswordChangeRequiredReceived;
-            }
-
-            if (_exception != null)
-                throw _exception;
-
-            return _authenticationResult;
-        }
-
-        private void Session_UserAuthenticationSuccessReceived(object sender, MessageEventArgs<SuccessMessage> e)
-        {
-            _authenticationResult = AuthenticationResult.Success;
-
-            _authenticationCompleted.Set();
-        }
-
-        private void Session_UserAuthenticationFailureReceived(object sender, MessageEventArgs<FailureMessage> e)
-        {
-            if (e.Message.PartialSuccess)
-                _authenticationResult = AuthenticationResult.PartialSuccess;
-            else
-                _authenticationResult = AuthenticationResult.Failure;
-
-            //  Copy allowed authentication methods
-            AllowedAuthentications = e.Message.AllowedAuthentications;
-
-            _authenticationCompleted.Set();
-        }
-
-        private void Session_UserAuthenticationPasswordChangeRequiredReceived(object sender, MessageEventArgs<PasswordChangeRequiredMessage> e)
-        {
-            _session.UnRegisterMessage("SSH_MSG_USERAUTH_PASSWD_CHANGEREQ");
-
-            ThreadAbstraction.ExecuteThread(() =>
-            {
-                try
-                {
-                    var eventArgs = new AuthenticationPasswordChangeEventArgs(Username);
-
-                    //  Raise an event to allow user to supply a new password
-                    if (PasswordExpired != null)
-                    {
-                        PasswordExpired(this, eventArgs);
-                    }
-
-                    //  Send new authentication request with new password
-                    _session.SendMessage(new RequestMessagePassword(ServiceName.Connection, Username, _password, eventArgs.NewPassword));
-                }
-                catch (Exception exp)
-                {
-                    _exception = exp;
-                    _authenticationCompleted.Set();
-                }
-            });
-        }
-
-        #region IDisposable Members
-
-        private bool _isDisposed;
-
-        /// <summary>
-        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Releases unmanaged and - optionally - managed resources
-        /// </summary>
-        /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (_isDisposed)
-                return;
-           
-            if (disposing)
-            {
-                var authenticationCompleted = _authenticationCompleted;
-                if (authenticationCompleted != null)
-                {
-                    authenticationCompleted.Dispose();
-                    _authenticationCompleted = null;
-                }
-
-                _isDisposed = true;
-            }
-        }
-
-        /// <summary>
-        /// Releases unmanaged resources and performs other cleanup operations before the
-        /// <see cref="PasswordAuthenticationMethod"/> is reclaimed by garbage collection.
-        /// </summary>
-        ~PasswordAuthenticationMethod()
-        {
-            Dispose(false);
-        }
-
-        #endregion
     }
+
+    public PasswordAuthenticationMethod(string username, byte[] password)
+      : base(username)
+    {
+      this._password = password != null ? password : throw new ArgumentNullException(nameof (password));
+      this._requestMessage = (RequestMessage) new RequestMessagePassword(ServiceName.Connection, this.Username, this._password);
+    }
+
+    public override AuthenticationResult Authenticate(Session session)
+    {
+      this._session = session != null ? session : throw new ArgumentNullException(nameof (session));
+      session.UserAuthenticationSuccessReceived += new EventHandler<MessageEventArgs<SuccessMessage>>(this.Session_UserAuthenticationSuccessReceived);
+      session.UserAuthenticationFailureReceived += new EventHandler<MessageEventArgs<FailureMessage>>(this.Session_UserAuthenticationFailureReceived);
+      session.UserAuthenticationPasswordChangeRequiredReceived += new EventHandler<MessageEventArgs<PasswordChangeRequiredMessage>>(this.Session_UserAuthenticationPasswordChangeRequiredReceived);
+      try
+      {
+        session.RegisterMessage("SSH_MSG_USERAUTH_PASSWD_CHANGEREQ");
+        session.SendMessage((Message) this._requestMessage);
+        session.WaitOnHandle((WaitHandle) this._authenticationCompleted);
+      }
+      finally
+      {
+        session.UnRegisterMessage("SSH_MSG_USERAUTH_PASSWD_CHANGEREQ");
+        session.UserAuthenticationSuccessReceived -= new EventHandler<MessageEventArgs<SuccessMessage>>(this.Session_UserAuthenticationSuccessReceived);
+        session.UserAuthenticationFailureReceived -= new EventHandler<MessageEventArgs<FailureMessage>>(this.Session_UserAuthenticationFailureReceived);
+        session.UserAuthenticationPasswordChangeRequiredReceived -= new EventHandler<MessageEventArgs<PasswordChangeRequiredMessage>>(this.Session_UserAuthenticationPasswordChangeRequiredReceived);
+      }
+      if (this._exception != null)
+        throw this._exception;
+      return this._authenticationResult;
+    }
+
+    private void Session_UserAuthenticationSuccessReceived(
+      object sender,
+      MessageEventArgs<SuccessMessage> e)
+    {
+      this._authenticationResult = AuthenticationResult.Success;
+      this._authenticationCompleted.Set();
+    }
+
+    private void Session_UserAuthenticationFailureReceived(
+      object sender,
+      MessageEventArgs<FailureMessage> e)
+    {
+      this._authenticationResult = !e.Message.PartialSuccess ? AuthenticationResult.Failure : AuthenticationResult.PartialSuccess;
+      this.AllowedAuthentications = e.Message.AllowedAuthentications;
+      this._authenticationCompleted.Set();
+    }
+
+    private void Session_UserAuthenticationPasswordChangeRequiredReceived(
+      object sender,
+      MessageEventArgs<PasswordChangeRequiredMessage> e)
+    {
+      this._session.UnRegisterMessage("SSH_MSG_USERAUTH_PASSWD_CHANGEREQ");
+      ThreadAbstraction.ExecuteThread((Action) (() =>
+      {
+        try
+        {
+          AuthenticationPasswordChangeEventArgs e1 = new AuthenticationPasswordChangeEventArgs(this.Username);
+          if (this.PasswordExpired != null)
+            this.PasswordExpired((object) this, e1);
+          this._session.SendMessage((Message) new RequestMessagePassword(ServiceName.Connection, this.Username, this._password, e1.NewPassword));
+        }
+        catch (Exception ex)
+        {
+          this._exception = ex;
+          this._authenticationCompleted.Set();
+        }
+      }));
+    }
+
+    public void Dispose()
+    {
+      this.Dispose(true);
+      GC.SuppressFinalize((object) this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+      if (this._isDisposed || !disposing)
+        return;
+      EventWaitHandle authenticationCompleted = this._authenticationCompleted;
+      if (authenticationCompleted != null)
+      {
+        authenticationCompleted.Dispose();
+        this._authenticationCompleted = (EventWaitHandle) null;
+      }
+      this._isDisposed = true;
+    }
+
+    ~PasswordAuthenticationMethod() => this.Dispose(false);
+  }
 }

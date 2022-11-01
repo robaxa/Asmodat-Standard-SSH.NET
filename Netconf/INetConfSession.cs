@@ -1,25 +1,20 @@
-﻿using System.Xml;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.NetConf.INetConfSession
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
+using System.Xml;
 
 namespace Renci.SshNet.NetConf
 {
-    internal interface INetConfSession : ISubsystemSession
-    {
-        /// <summary>
-        /// Gets the NetConf server capabilities.
-        /// </summary>
-        /// <value>
-        /// The NetConf server capabilities.
-        /// </value>
-        XmlDocument ServerCapabilities { get; }
+  internal interface INetConfSession : ISubsystemSession, IDisposable
+  {
+    XmlDocument ServerCapabilities { get; }
 
-        /// <summary>
-        /// Gets the NetConf client capabilities.
-        /// </summary>
-        /// <value>
-        /// The NetConf client capabilities.
-        /// </value>
-        XmlDocument ClientCapabilities { get; }
+    XmlDocument ClientCapabilities { get; }
 
-        XmlDocument SendReceiveRpc(XmlDocument rpc, bool automaticMessageIdHandling);
-    }
+    XmlDocument SendReceiveRpc(XmlDocument rpc, bool automaticMessageIdHandling);
+  }
 }

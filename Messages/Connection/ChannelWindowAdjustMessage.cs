@@ -1,72 +1,40 @@
-﻿namespace Renci.SshNet.Messages.Connection
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Connection.ChannelWindowAdjustMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Messages.Connection
 {
-    /// <summary>
-    /// Represents SSH_MSG_CHANNEL_SUCCESS message.
-    /// </summary>
-    [Message("SSH_MSG_CHANNEL_WINDOW_ADJUST", 93)]
-    public class ChannelWindowAdjustMessage : ChannelMessage
+  [Message("SSH_MSG_CHANNEL_WINDOW_ADJUST", 93)]
+  public class ChannelWindowAdjustMessage : ChannelMessage
+  {
+    public uint BytesToAdd { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4;
+
+    public ChannelWindowAdjustMessage()
     {
-        /// <summary>
-        /// Gets number of bytes to add to the window.
-        /// </summary>
-        public uint BytesToAdd { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // BytesToAdd
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelWindowAdjustMessage"/> class.
-        /// </summary>
-        public ChannelWindowAdjustMessage()
-        {
-
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelWindowAdjustMessage"/> class.
-        /// </summary>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        /// <param name="bytesToAdd">The bytes to add.</param>
-        public ChannelWindowAdjustMessage(uint localChannelNumber, uint bytesToAdd)
-            : base(localChannelNumber)
-        {
-            BytesToAdd = bytesToAdd;
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            base.LoadData();
-            BytesToAdd = ReadUInt32();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            base.SaveData();
-            Write(BytesToAdd);
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnChannelWindowAdjustReceived(this);
-        }
     }
+
+    public ChannelWindowAdjustMessage(uint localChannelNumber, uint bytesToAdd)
+      : base(localChannelNumber)
+    {
+      this.BytesToAdd = bytesToAdd;
+    }
+
+    protected override void LoadData()
+    {
+      base.LoadData();
+      this.BytesToAdd = this.ReadUInt32();
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.Write(this.BytesToAdd);
+    }
+
+    internal override void Process(Session session) => session.OnChannelWindowAdjustReceived(this);
+  }
 }

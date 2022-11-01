@@ -1,93 +1,45 @@
-﻿using System;
-using System.Globalization;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Transport.IgnoreMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Abstractions;
 using Renci.SshNet.Common;
+using System;
+using System.Globalization;
 
 namespace Renci.SshNet.Messages.Transport
 {
-    /// <summary>
-    /// Represents SSH_MSG_IGNORE message.
-    /// </summary>
-    [Message("SSH_MSG_IGNORE", MessageNumber)]
-    public class IgnoreMessage : Message
+  [Message("SSH_MSG_IGNORE", 2)]
+  public class IgnoreMessage : Message
+  {
+    internal const byte MessageNumber = 2;
+
+    public byte[] Data { get; private set; }
+
+    public IgnoreMessage() => this.Data = Array<byte>.Empty;
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this.Data.Length;
+
+    public IgnoreMessage(byte[] data) => this.Data = data != null ? data : throw new ArgumentNullException(nameof (data));
+
+    protected override void LoadData()
     {
-        internal const byte MessageNumber = 2;
-
-        /// <summary>
-        /// Gets ignore message data if any.
-        /// </summary>
-        public byte[] Data { get; private set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="IgnoreMessage"/> class
-        /// </summary>
-        public IgnoreMessage()
-        {
-            Data = Array<byte>.Empty;
-        }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // Data length
-                capacity += Data.Length; // Data
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="IgnoreMessage"/> class.
-        /// </summary>
-        /// <param name="data">The data.</param>
-        public IgnoreMessage(byte[] data)
-        {
-            if (data == null)
-                throw new ArgumentNullException("data");
-
-            Data = data;
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            var dataLength = ReadUInt32();
-            if (dataLength > int.MaxValue)
-            {
-                throw new NotSupportedException(string.Format(CultureInfo.CurrentCulture, "Data longer than {0} is not supported.", int.MaxValue));
-            }
-
-            if (dataLength > (DataStream.Length - DataStream.Position))
-            {
-                DiagnosticAbstraction.Log("SSH_MSG_IGNORE: Length exceeds data bytes, data ignored.");
-                Data = Array<byte>.Empty;
-            }
-            else
-            {
-                Data = ReadBytes((int) dataLength);
-            }
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            WriteBinaryString(Data);
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnIgnoreReceived(this);
-        }
+      uint length = this.ReadUInt32();
+      if (length > (uint) int.MaxValue)
+        throw new NotSupportedException(string.Format((IFormatProvider) CultureInfo.CurrentCulture, "Data longer than {0} is not supported.", (object) int.MaxValue));
+      if ((long) length > this.DataStream.Length - this.DataStream.Position)
+      {
+        DiagnosticAbstraction.Log("SSH_MSG_IGNORE: Length exceeds data bytes, data ignored.");
+        this.Data = Array<byte>.Empty;
+      }
+      else
+        this.Data = this.ReadBytes((int) length);
     }
+
+    protected override void SaveData() => this.WriteBinaryString(this.Data);
+
+    internal override void Process(Session session) => session.OnIgnoreReceived(this);
+  }
 }

@@ -1,25 +1,18 @@
-﻿namespace Renci.SshNet.Common
-{
-    /// <summary>
-    /// Provides data for <see cref="Renci.SshNet.PasswordConnectionInfo.PasswordExpired"/> event.
-    /// </summary>
-    public class AuthenticationPasswordChangeEventArgs : AuthenticationEventArgs
-    {
-        /// <summary>
-        /// Gets or sets the new password.
-        /// </summary>
-        /// <value>
-        /// The new password.
-        /// </value>
-        public byte[] NewPassword { get; set; }
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.AuthenticationPasswordChangeEventArgs
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AuthenticationPasswordChangeEventArgs"/> class.
-        /// </summary>
-        /// <param name="username">The username.</param>
-        public AuthenticationPasswordChangeEventArgs(string username)
-            : base(username)
-        {
-        }
+namespace Renci.SshNet.Common
+{
+  public class AuthenticationPasswordChangeEventArgs : AuthenticationEventArgs
+  {
+    public byte[] NewPassword { get; set; }
+
+    public AuthenticationPasswordChangeEventArgs(string username)
+      : base(username)
+    {
     }
+  }
 }

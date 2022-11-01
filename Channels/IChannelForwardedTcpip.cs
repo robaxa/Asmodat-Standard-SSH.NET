@@ -1,24 +1,19 @@
-﻿using System;
-using System.Net;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Channels.IChannelForwardedTcpip
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using System;
+using System.Net;
 
 namespace Renci.SshNet.Channels
 {
-    /// <summary>
-    /// A "forwarded-tcpip" SSH channel.
-    /// </summary>
-    internal interface IChannelForwardedTcpip : IDisposable
-    {
-        /// <summary>
-        /// Occurs when an exception is thrown while processing channel messages.
-        /// </summary>
-        event EventHandler<ExceptionEventArgs> Exception;
+  internal interface IChannelForwardedTcpip : IDisposable
+  {
+    event EventHandler<ExceptionEventArgs> Exception;
 
-        /// <summary>
-        /// Binds the channel to the specified endpoint.
-        /// </summary>
-        /// <param name="remoteEndpoint">The endpoint to connect to.</param>
-        /// <param name="forwardedPort">The forwarded port for which the channel is opened.</param>
-        void Bind(IPEndPoint remoteEndpoint, IForwardedPort forwardedPort);
-    }
+    void Bind(IPEndPoint remoteEndpoint, IForwardedPort forwardedPort);
+  }
 }

@@ -1,76 +1,48 @@
-﻿using System;
-#if FEATURE_BINARY_SERIALIZATION
-using System.Runtime.Serialization;
-#endif // FEATURE_BINARY_SERIALIZATION
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.SshConnectionException
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Messages.Transport;
+using System;
+using System.Runtime.Serialization;
 
 namespace Renci.SshNet.Common
 {
-    /// <summary>
-    /// The exception that is thrown when connection was terminated.
-    /// </summary>
-#if FEATURE_BINARY_SERIALIZATION
-    [Serializable]
-#endif // FEATURE_BINARY_SERIALIZATION
-    public class SshConnectionException : SshException
+  [Serializable]
+  public class SshConnectionException : SshException
+  {
+    public DisconnectReason DisconnectReason { get; private set; }
+
+    public SshConnectionException()
     {
-        /// <summary>
-        /// Gets the disconnect reason if provided by the server or client. Otherwise None.
-        /// </summary>
-        public DisconnectReason DisconnectReason { get; private set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SshConnectionException"/> class.
-        /// </summary>
-        public SshConnectionException()
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SshConnectionException"/> class.
-        /// </summary>
-        /// <param name="message">The message.</param>
-        public SshConnectionException(string message)
-            : base(message)
-        {
-            DisconnectReason = DisconnectReason.None;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SshConnectionException"/> class.
-        /// </summary>
-        /// <param name="message">The message.</param>
-        /// <param name="disconnectReasonCode">The disconnect reason code.</param>
-        public SshConnectionException(string message, DisconnectReason disconnectReasonCode)
-            : base(message)
-        {
-            DisconnectReason = disconnectReasonCode;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SshConnectionException"/> class.
-        /// </summary>
-        /// <param name="message">The message.</param>
-        /// <param name="disconnectReasonCode">The disconnect reason code.</param>
-        /// <param name="inner">The inner.</param>
-        public SshConnectionException(string message, DisconnectReason disconnectReasonCode, Exception inner)
-            : base(message, inner)
-        {
-            DisconnectReason = disconnectReasonCode;
-        }
-
-#if FEATURE_BINARY_SERIALIZATION
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SshConnectionException"/> class.
-        /// </summary>
-        /// <param name="info">The <see cref="SerializationInfo"/> that holds the serialized object data about the exception being thrown.</param>
-        /// <param name="context">The <see cref="StreamingContext"/> that contains contextual information about the source or destination.</param>
-        /// <exception cref="ArgumentNullException">The <paramref name="info"/> parameter is <c>null</c>.</exception>
-        /// <exception cref="SerializationException">The class name is <c>null</c> or <see cref="Exception.HResult"/> is zero (0). </exception>
-        protected SshConnectionException(SerializationInfo info, StreamingContext context)
-            : base(info, context)
-        {
-        }
-#endif // FEATURE_BINARY_SERIALIZATION
     }
+
+    public SshConnectionException(string message)
+      : base(message)
+    {
+      this.DisconnectReason = DisconnectReason.None;
+    }
+
+    public SshConnectionException(string message, DisconnectReason disconnectReasonCode)
+      : base(message)
+    {
+      this.DisconnectReason = disconnectReasonCode;
+    }
+
+    public SshConnectionException(
+      string message,
+      DisconnectReason disconnectReasonCode,
+      Exception inner)
+      : base(message, inner)
+    {
+      this.DisconnectReason = disconnectReasonCode;
+    }
+
+    protected SshConnectionException(SerializationInfo info, StreamingContext context)
+      : base(info, context)
+    {
+    }
+  }
 }

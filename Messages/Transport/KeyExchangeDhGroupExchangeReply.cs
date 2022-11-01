@@ -1,81 +1,41 @@
-﻿using Renci.SshNet.Common;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Transport.KeyExchangeDhGroupExchangeReply
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
 
 namespace Renci.SshNet.Messages.Transport
 {
-    /// <summary>
-    /// Represents SSH_MSG_KEX_DH_GEX_REPLY message.
-    /// </summary>
-    [Message("SSH_MSG_KEX_DH_GEX_REPLY", MessageNumber)]
-    internal class KeyExchangeDhGroupExchangeReply : Message
+  [Message("SSH_MSG_KEX_DH_GEX_REPLY", 33)]
+  internal class KeyExchangeDhGroupExchangeReply : Message
+  {
+    internal const byte MessageNumber = 33;
+    private byte[] _fBytes;
+
+    public byte[] HostKey { get; private set; }
+
+    public BigInteger F => this._fBytes.ToBigInteger();
+
+    public byte[] Signature { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this.HostKey.Length + 4 + this._fBytes.Length + 4 + this.Signature.Length;
+
+    protected override void LoadData()
     {
-        internal const byte MessageNumber = 33;
-
-        private byte[] _fBytes;
-
-        /// <summary>
-        /// Gets server public host key and certificates
-        /// </summary>
-        /// <value>The host key.</value>
-        public byte[] HostKey { get; private set; }
-
-        /// <summary>
-        /// Gets the F value.
-        /// </summary>
-        public BigInteger F
-        {
-            get { return _fBytes.ToBigInteger(); }
-        }
-
-        /// <summary>
-        /// Gets the signature of H.
-        /// </summary>
-        /// <value>The signature.</value>
-        public byte[] Signature { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // HostKey length
-                capacity += HostKey.Length; // HostKey
-                capacity += 4; // F length
-                capacity += _fBytes.Length; // F
-                capacity += 4; // Signature length
-                capacity += Signature.Length; // Signature
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            HostKey = ReadBinary();
-            _fBytes = ReadBinary();
-            Signature = ReadBinary();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            WriteBinaryString(HostKey);
-            WriteBinaryString(_fBytes);
-            WriteBinaryString(Signature);
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnKeyExchangeDhGroupExchangeReplyReceived(this);
-        }
+      this.HostKey = this.ReadBinary();
+      this._fBytes = this.ReadBinary();
+      this.Signature = this.ReadBinary();
     }
+
+    protected override void SaveData()
+    {
+      this.WriteBinaryString(this.HostKey);
+      this.WriteBinaryString(this._fBytes);
+      this.WriteBinaryString(this.Signature);
+    }
+
+    internal override void Process(Session session) => session.OnKeyExchangeDhGroupExchangeReplyReceived(this);
+  }
 }

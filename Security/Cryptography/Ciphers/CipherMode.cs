@@ -1,71 +1,40 @@
-﻿using Renci.SshNet.Common;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.Cryptography.Ciphers.CipherMode
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
 
 namespace Renci.SshNet.Security.Cryptography.Ciphers
 {
-    /// <summary>
-    /// Base class for cipher mode implementations
-    /// </summary>
-    public abstract class CipherMode
+  public abstract class CipherMode
+  {
+    protected BlockCipher Cipher;
+    protected byte[] IV;
+    protected int _blockSize;
+
+    protected CipherMode(byte[] iv) => this.IV = iv;
+
+    internal void Init(BlockCipher cipher)
     {
-        /// <summary>
-        /// Gets the cipher.
-        /// </summary>
-        protected BlockCipher Cipher;
-
-        /// <summary>
-        /// Gets the IV vector.
-        /// </summary>
-        protected byte[] IV;
-
-        /// <summary>
-        /// Holds block size of the cipher.
-        /// </summary>
-        protected int _blockSize;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CipherMode"/> class.
-        /// </summary>
-        /// <param name="iv">The iv.</param>
-        protected CipherMode(byte[] iv)
-        {
-            IV = iv;
-        }
-
-        /// <summary>
-        /// Initializes the specified cipher mode.
-        /// </summary>
-        /// <param name="cipher">The cipher.</param>
-        internal void Init(BlockCipher cipher)
-        {
-            Cipher = cipher;
-            _blockSize = cipher.BlockSize;
-            IV = IV.Take(_blockSize);
-        }
-
-        /// <summary>
-        /// Encrypts the specified region of the input byte array and copies the encrypted data to the specified region of the output byte array.
-        /// </summary>
-        /// <param name="inputBuffer">The input data to encrypt.</param>
-        /// <param name="inputOffset">The offset into the input byte array from which to begin using data.</param>
-        /// <param name="inputCount">The number of bytes in the input byte array to use as data.</param>
-        /// <param name="outputBuffer">The output to which to write encrypted data.</param>
-        /// <param name="outputOffset">The offset into the output byte array from which to begin writing data.</param>
-        /// <returns>
-        /// The number of bytes encrypted.
-        /// </returns>
-        public abstract int EncryptBlock(byte[] inputBuffer, int inputOffset, int inputCount, byte[] outputBuffer, int outputOffset);
-
-        /// <summary>
-        /// Decrypts the specified region of the input byte array and copies the decrypted data to the specified region of the output byte array.
-        /// </summary>
-        /// <param name="inputBuffer">The input data to decrypt.</param>
-        /// <param name="inputOffset">The offset into the input byte array from which to begin using data.</param>
-        /// <param name="inputCount">The number of bytes in the input byte array to use as data.</param>
-        /// <param name="outputBuffer">The output to which to write decrypted data.</param>
-        /// <param name="outputOffset">The offset into the output byte array from which to begin writing data.</param>
-        /// <returns>
-        /// The number of bytes decrypted.
-        /// </returns>
-        public abstract int DecryptBlock(byte[] inputBuffer, int inputOffset, int inputCount, byte[] outputBuffer, int outputOffset);
+      this.Cipher = cipher;
+      this._blockSize = (int) cipher.BlockSize;
+      this.IV = this.IV.Take(this._blockSize);
     }
+
+    public abstract int EncryptBlock(
+      byte[] inputBuffer,
+      int inputOffset,
+      int inputCount,
+      byte[] outputBuffer,
+      int outputOffset);
+
+    public abstract int DecryptBlock(
+      byte[] inputBuffer,
+      int inputOffset,
+      int inputCount,
+      byte[] outputBuffer,
+      int outputOffset);
+  }
 }

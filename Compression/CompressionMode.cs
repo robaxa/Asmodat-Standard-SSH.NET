@@ -1,18 +1,14 @@
-﻿namespace Renci.SshNet.Compression
-{
-    /// <summary>
-    /// Specifies compression modes
-    /// </summary>
-    public enum CompressionMode
-    {
-        /// <summary>
-        /// Specifies that content should be compressed.
-        /// </summary>
-        Compress = 0,
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Compression.CompressionMode
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
 
-        /// <summary>
-        /// Specifies that content should be decompressed.
-        /// </summary>
-        Decompress = 1,
-    }
+namespace Renci.SshNet.Compression
+{
+  public enum CompressionMode
+  {
+    Compress,
+    Decompress,
+  }
 }

@@ -1,68 +1,29 @@
-﻿using Renci.SshNet.Common;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Transport.KeyExchangeDhInitMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
+using System;
 
 namespace Renci.SshNet.Messages.Transport
 {
-    /// <summary>
-    /// Represents SSH_MSG_KEXDH_INIT message.
-    /// </summary>
-    [Message("SSH_MSG_KEXDH_INIT", 30)]
-    internal class KeyExchangeDhInitMessage : Message, IKeyExchangedAllowed
-    {
-        private byte[] _eBytes;
+  [Message("SSH_MSG_KEXDH_INIT", 30)]
+  internal class KeyExchangeDhInitMessage : Message, IKeyExchangedAllowed
+  {
+    private byte[] _eBytes;
 
-        /// <summary>
-        /// Gets the E value.
-        /// </summary>
-        public BigInteger E
-        {
-            get { return _eBytes.ToBigInteger(); }
-        }
+    public BigInteger E => this._eBytes.ToBigInteger();
 
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // E length
-                capacity += _eBytes.Length; // E
-                return capacity;
-            }
-        }
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this._eBytes.Length;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="KeyExchangeDhInitMessage"/> class.
-        /// </summary>
-        /// <param name="clientExchangeValue">The client exchange value.</param>
-        public KeyExchangeDhInitMessage(BigInteger clientExchangeValue)
-        {
-            _eBytes = clientExchangeValue.ToByteArray().Reverse();
-        }
+    public KeyExchangeDhInitMessage(BigInteger clientExchangeValue) => this._eBytes = clientExchangeValue.ToByteArray().Reverse<byte>();
 
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            _eBytes = ReadBinary();
-        }
+    protected override void LoadData() => this._eBytes = this.ReadBinary();
 
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            WriteBinaryString(_eBytes);
-        }
+    protected override void SaveData() => this.WriteBinaryString(this._eBytes);
 
-        internal override void Process(Session session)
-        {
-            throw new System.NotImplementedException();
-        }
-    }
+    internal override void Process(Session session) => throw new NotImplementedException();
+  }
 }

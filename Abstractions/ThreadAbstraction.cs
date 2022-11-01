@@ -1,51 +1,25 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Abstractions.ThreadAbstraction
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
+using System.Threading;
 
 namespace Renci.SshNet.Abstractions
 {
-    internal static class ThreadAbstraction
+  internal static class ThreadAbstraction
+  {
+    public static void Sleep(int millisecondsTimeout) => Thread.Sleep(millisecondsTimeout);
+
+    public static void ExecuteThreadLongRunning(Action action) => new Thread((ThreadStart) (() => action())).Start();
+
+    public static void ExecuteThread(Action action)
     {
-        /// <summary>
-        /// Suspends the current thread for the specified number of milliseconds.
-        /// </summary>
-        /// <param name="millisecondsTimeout">The number of milliseconds for which the thread is suspended.</param>
-        public static void Sleep(int millisecondsTimeout)
-        {
-#if FEATURE_THREAD_SLEEP
-            System.Threading.Thread.Sleep(millisecondsTimeout);
-#elif FEATURE_THREAD_TAP
-            System.Threading.Tasks.Task.Delay(millisecondsTimeout).GetAwaiter().GetResult();
-#else
-            #error Suspend of the current thread is not implemented.
-#endif
-        }
-
-        public static void ExecuteThreadLongRunning(Action action)
-        {
-#if FEATURE_THREAD_TAP
-            var taskCreationOptions = System.Threading.Tasks.TaskCreationOptions.LongRunning;
-            System.Threading.Tasks.Task.Factory.StartNew(action, taskCreationOptions);
-#else
-            var thread = new System.Threading.Thread(() => action());
-            thread.Start();
-#endif
-        }
-
-        /// <summary>
-        /// Executes the specified action in a separate thread.
-        /// </summary>
-        /// <param name="action">The action to execute.</param>
-        public static void ExecuteThread(Action action)
-        {
-#if FEATURE_THREAD_THREADPOOL
-            if (action == null)
-                throw new ArgumentNullException("action");
-
-            System.Threading.ThreadPool.QueueUserWorkItem(o => action());
-#elif FEATURE_THREAD_TAP
-            System.Threading.Tasks.Task.Run(action);
-#else
-            #error Execution of action in a separate thread is not implemented.
-#endif
-        }
+      if (action == null)
+        throw new ArgumentNullException(nameof (action));
+      ThreadPool.QueueUserWorkItem((WaitCallback) (o => action()));
     }
+  }
 }

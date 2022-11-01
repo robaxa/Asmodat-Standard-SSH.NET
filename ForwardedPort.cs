@@ -1,173 +1,101 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.ForwardedPort
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using System;
 
 namespace Renci.SshNet
 {
-    /// <summary>
-    /// Base class for port forwarding functionality.
-    /// </summary>
-    public abstract class ForwardedPort : IForwardedPort
+  public abstract class ForwardedPort : IForwardedPort
+  {
+    internal ISession Session { get; set; }
+
+    internal event EventHandler Closing;
+
+    event EventHandler IForwardedPort.Closing
     {
-        /// <summary>
-        /// Gets or sets the session.
-        /// </summary>
-        /// <value>
-        /// The session.
-        /// </value>
-        internal ISession Session { get; set; }
-
-        /// <summary>
-        /// The <see cref="Closing"/> event occurs as the forwarded port is being stopped.
-        /// </summary>
-        internal event EventHandler Closing;
-
-        /// <summary>
-        /// The <see cref="IForwardedPort.Closing"/> event occurs as the forwarded port is being stopped.
-        /// </summary>
-        event EventHandler IForwardedPort.Closing
-        {
-            add { Closing += value; }
-            remove { Closing -= value; }
-        }
-
-        /// <summary>
-        /// Gets a value indicating whether port forwarding is started.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if port forwarding is started; otherwise, <c>false</c>.
-        /// </value>
-        public abstract bool IsStarted { get; }
-
-        /// <summary>
-        /// Occurs when an exception is thrown.
-        /// </summary>
-        public event EventHandler<ExceptionEventArgs> Exception;
-
-        /// <summary>
-        /// Occurs when a port forwarding request is received.
-        /// </summary>
-        public event EventHandler<PortForwardEventArgs> RequestReceived;
-
-        /// <summary>
-        /// Starts port forwarding.
-        /// </summary>
-        public virtual void Start()
-        {
-            CheckDisposed();
-
-            if (IsStarted)
-                throw new InvalidOperationException("Forwarded port is already started.");
-            if (Session == null)
-                throw new InvalidOperationException("Forwarded port is not added to a client.");
-            if (!Session.IsConnected)
-                throw new SshConnectionException("Client not connected.");
-
-            Session.ErrorOccured += Session_ErrorOccured;
-            StartPort();
-        }
-
-        /// <summary>
-        /// Stops port forwarding.
-        /// </summary>
-        public virtual void Stop()
-        {
-            if (IsStarted)
-            {
-                StopPort(Session.ConnectionInfo.Timeout);
-            }
-        }
-
-        /// <summary>
-        /// Starts port forwarding.
-        /// </summary>
-        protected abstract void StartPort();
-
-        /// <summary>
-        /// Stops port forwarding, and waits for the specified timeout until all pending
-        /// requests are processed.
-        /// </summary>
-        /// <param name="timeout">The maximum amount of time to wait for pending requests to finish processing.</param>
-        protected virtual void StopPort(TimeSpan timeout)
-        {
-            RaiseClosing();
-
-            var session = Session;
-            if (session != null)
-            {
-                session.ErrorOccured -= Session_ErrorOccured;
-            }
-        }
-
-        /// <summary>
-        /// Releases unmanaged and - optionally - managed resources
-        /// </summary>
-        /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                var session = Session;
-                if (session != null)
-                {
-                    StopPort(session.ConnectionInfo.Timeout);
-                    Session = null;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Ensures the current instance is not disposed.
-        /// </summary>
-        /// <exception cref="ObjectDisposedException">The current instance is disposed.</exception>
-        protected abstract void CheckDisposed();
-
-        /// <summary>
-        /// Raises <see cref="Exception"/> event.
-        /// </summary>
-        /// <param name="exception">The exception.</param>
-        protected void RaiseExceptionEvent(Exception exception)
-        {
-            var handlers = Exception;
-            if (handlers != null)
-            {
-                handlers(this, new ExceptionEventArgs(exception));
-            }
-        }
-
-        /// <summary>
-        /// Raises <see cref="RequestReceived"/> event.
-        /// </summary>
-        /// <param name="host">Request originator host.</param>
-        /// <param name="port">Request originator port.</param>
-        protected void RaiseRequestReceived(string host, uint port)
-        {
-            var handlers = RequestReceived;
-            if (handlers != null)
-            {
-                handlers(this, new PortForwardEventArgs(host, port));
-            }
-        }
-
-        /// <summary>
-        /// Raises the <see cref="IForwardedPort.Closing"/> event.
-        /// </summary>
-        private void RaiseClosing()
-        {
-            var handlers = Closing;
-            if (handlers != null)
-            {
-                handlers(this, EventArgs.Empty);
-            }
-        }
-
-        /// <summary>
-        /// Handles session ErrorOccured event.
-        /// </summary>
-        /// <param name="sender">The source of the event.</param>
-        /// <param name="e">The <see cref="ExceptionEventArgs"/> instance containing the event data.</param>
-        private void Session_ErrorOccured(object sender, ExceptionEventArgs e)
-        {
-            RaiseExceptionEvent(e.Exception);
-        }
+      add => this.Closing += value;
+      remove => this.Closing -= value;
     }
+
+    public abstract bool IsStarted { get; }
+
+    public event EventHandler<ExceptionEventArgs> Exception;
+
+    public event EventHandler<PortForwardEventArgs> RequestReceived;
+
+    public virtual void Start()
+    {
+      this.CheckDisposed();
+      if (this.IsStarted)
+        throw new InvalidOperationException("Forwarded port is already started.");
+      if (this.Session == null)
+        throw new InvalidOperationException("Forwarded port is not added to a client.");
+      if (!this.Session.IsConnected)
+        throw new SshConnectionException("Client not connected.");
+      this.Session.ErrorOccured += new EventHandler<ExceptionEventArgs>(this.Session_ErrorOccured);
+      this.StartPort();
+    }
+
+    public virtual void Stop()
+    {
+      if (!this.IsStarted)
+        return;
+      this.StopPort(this.Session.ConnectionInfo.Timeout);
+    }
+
+    protected abstract void StartPort();
+
+    protected virtual void StopPort(TimeSpan timeout)
+    {
+      this.RaiseClosing();
+      ISession session = this.Session;
+      if (session == null)
+        return;
+      session.ErrorOccured -= new EventHandler<ExceptionEventArgs>(this.Session_ErrorOccured);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+      if (!disposing)
+        return;
+      ISession session = this.Session;
+      if (session != null)
+      {
+        this.StopPort(session.ConnectionInfo.Timeout);
+        this.Session = (ISession) null;
+      }
+    }
+
+    protected abstract void CheckDisposed();
+
+    protected void RaiseExceptionEvent(System.Exception exception)
+    {
+      EventHandler<ExceptionEventArgs> exception1 = this.Exception;
+      if (exception1 == null)
+        return;
+      exception1((object) this, new ExceptionEventArgs(exception));
+    }
+
+    protected void RaiseRequestReceived(string host, uint port)
+    {
+      EventHandler<PortForwardEventArgs> requestReceived = this.RequestReceived;
+      if (requestReceived == null)
+        return;
+      requestReceived((object) this, new PortForwardEventArgs(host, port));
+    }
+
+    private void RaiseClosing()
+    {
+      EventHandler closing = this.Closing;
+      if (closing == null)
+        return;
+      closing((object) this, EventArgs.Empty);
+    }
+
+    private void Session_ErrorOccured(object sender, ExceptionEventArgs e) => this.RaiseExceptionEvent(e.Exception);
+  }
 }

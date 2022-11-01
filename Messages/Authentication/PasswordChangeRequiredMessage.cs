@@ -1,61 +1,32 @@
-﻿namespace Renci.SshNet.Messages.Authentication
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Authentication.PasswordChangeRequiredMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Messages.Authentication
 {
-    /// <summary>
-    /// Represents SSH_MSG_USERAUTH_PASSWD_CHANGEREQ message.
-    /// </summary>
-    [Message("SSH_MSG_USERAUTH_PASSWD_CHANGEREQ", 60)]
-    internal class PasswordChangeRequiredMessage : Message
+  [Renci.SshNet.Messages.Message("SSH_MSG_USERAUTH_PASSWD_CHANGEREQ", 60)]
+  internal class PasswordChangeRequiredMessage : Renci.SshNet.Messages.Message
+  {
+    public byte[] Message { get; private set; }
+
+    public byte[] Language { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this.Message.Length + 4 + this.Language.Length;
+
+    protected override void LoadData()
     {
-        /// <summary>
-        /// Gets password change request message as UTF-8 encoded byte array.
-        /// </summary>
-        public byte[] Message { get; private set; }
-
-        /// <summary>
-        /// Gets message language as UTF-8 encoded byte array.
-        /// </summary>
-        public byte[] Language { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // Message length
-                capacity += Message.Length; // Message
-                capacity += 4; // Language length
-                capacity += Language.Length; // Language
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            Message = ReadBinary();
-            Language = ReadBinary();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            WriteBinaryString(Message);
-            WriteBinaryString(Language);
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnUserAuthenticationPasswordChangeRequiredReceived(this);
-        }
+      this.Message = this.ReadBinary();
+      this.Language = this.ReadBinary();
     }
+
+    protected override void SaveData()
+    {
+      this.WriteBinaryString(this.Message);
+      this.WriteBinaryString(this.Language);
+    }
+
+    internal override void Process(Session session) => session.OnUserAuthenticationPasswordChangeRequiredReceived(this);
+  }
 }

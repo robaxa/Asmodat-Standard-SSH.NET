@@ -1,99 +1,60 @@
-﻿namespace Renci.SshNet.Messages.Transport
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Transport.DisconnectMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
+
+namespace Renci.SshNet.Messages.Transport
 {
-    /// <summary>
-    /// Represents SSH_MSG_DISCONNECT message.
-    /// </summary>
-    [Message("SSH_MSG_DISCONNECT", 1)]
-    public class DisconnectMessage : Message, IKeyExchangedAllowed
+  [Message("SSH_MSG_DISCONNECT", 1)]
+  public class DisconnectMessage : Message, IKeyExchangedAllowed
+  {
+    private byte[] _description;
+    private byte[] _language;
+
+    public DisconnectReason ReasonCode { get; private set; }
+
+    public string Description
     {
-        private byte[] _description;
-        private byte[] _language;
-
-        /// <summary>
-        /// Gets disconnect reason code.
-        /// </summary>
-        public DisconnectReason ReasonCode { get; private set; }
-
-        /// <summary>
-        /// Gets disconnect description.
-        /// </summary>
-        public string Description
-        {
-            get { return Utf8.GetString(_description, 0, _description.Length); }
-            private set { _description = Utf8.GetBytes(value); }
-        }
-
-        /// <summary>
-        /// Gets message language.
-        /// </summary>
-        public string Language
-        {
-            get { return Utf8.GetString(_language, 0, _language.Length); }
-            private set { _language = Utf8.GetBytes(value); }
-        }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // ReasonCode
-                capacity += 4; // Description length
-                capacity += _description.Length; // Description
-                capacity += 4; // Language length
-                capacity += _language.Length; // Language
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DisconnectMessage"/> class.
-        /// </summary>
-        public DisconnectMessage()
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DisconnectMessage"/> class.
-        /// </summary>
-        /// <param name="reasonCode">The reason code.</param>
-        /// <param name="message">The message.</param>
-        public DisconnectMessage(DisconnectReason reasonCode, string message)
-        {
-            ReasonCode = reasonCode;
-            Description = message;
-            Language = "en";
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            ReasonCode = (DisconnectReason) ReadUInt32();
-            _description = ReadBinary();
-            _language = ReadBinary();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            Write((uint) ReasonCode);
-            WriteBinaryString(_description);
-            WriteBinaryString(_language);
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnDisconnectReceived(this);
-        }
+      get => SshData.Utf8.GetString(this._description, 0, this._description.Length);
+      private set => this._description = SshData.Utf8.GetBytes(value);
     }
+
+    public string Language
+    {
+      get => SshData.Utf8.GetString(this._language, 0, this._language.Length);
+      private set => this._language = SshData.Utf8.GetBytes(value);
+    }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + 4 + this._description.Length + 4 + this._language.Length;
+
+    public DisconnectMessage()
+    {
+    }
+
+    public DisconnectMessage(DisconnectReason reasonCode, string message)
+    {
+      this.ReasonCode = reasonCode;
+      this.Description = message;
+      this.Language = "en";
+    }
+
+    protected override void LoadData()
+    {
+      this.ReasonCode = (DisconnectReason) this.ReadUInt32();
+      this._description = this.ReadBinary();
+      this._language = this.ReadBinary();
+    }
+
+    protected override void SaveData()
+    {
+      this.Write((uint) this.ReasonCode);
+      this.WriteBinaryString(this._description);
+      this.WriteBinaryString(this._language);
+    }
+
+    internal override void Process(Session session) => session.OnDisconnectReceived(this);
+  }
 }

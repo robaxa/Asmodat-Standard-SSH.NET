@@ -1,123 +1,60 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Connection.ChannelDataMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Messages.Connection
 {
-    /// <summary>
-    /// Represents SSH_MSG_CHANNEL_DATA message.
-    /// </summary>
-    [Message("SSH_MSG_CHANNEL_DATA", MessageNumber)]
-    public class ChannelDataMessage : ChannelMessage
+  [Message("SSH_MSG_CHANNEL_DATA", 94)]
+  public class ChannelDataMessage : ChannelMessage
+  {
+    internal const byte MessageNumber = 94;
+
+    public byte[] Data { get; private set; }
+
+    public int Offset { get; set; }
+
+    public int Size { get; set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this.Size;
+
+    internal override void Process(Session session) => session.OnChannelDataReceived(this);
+
+    public ChannelDataMessage()
     {
-        internal const byte MessageNumber = 94;
-
-        /// <summary>
-        /// Gets or sets message data.
-        /// </summary>
-        /// <value>
-        /// The data.
-        /// </value>
-        /// <remarks>
-        /// The actual data to read or write depends on the <see cref="Offset"/> and <see cref="Size"/>.
-        /// </remarks>
-        public byte[] Data { get; private set; }
-
-        /// <summary>
-        /// Gets the zero-based offset in <see cref="Data"/> at which the data begins.
-        /// </summary>
-        /// <value>
-        /// The zero-based offset in <see cref="Data"/> at which the data begins.
-        /// </value>
-        public int Offset { get; set; }
-
-        /// <summary>
-        /// Gets the number of bytes of <see cref="Data"/> to read or write.
-        /// </summary>
-        /// <value>
-        /// The number of bytes of <see cref="Data"/> to read or write.
-        /// </value>
-        public int Size { get; set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // Data length
-                capacity += Size; // Data
-                return capacity;
-            }
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnChannelDataReceived(this);
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelDataMessage"/> class.
-        /// </summary>
-        public ChannelDataMessage()
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelDataMessage"/> class.
-        /// </summary>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        /// <param name="data">Message data.</param>
-        public ChannelDataMessage(uint localChannelNumber, byte[] data)
-            : base(localChannelNumber)
-        {
-            if (data == null)
-                throw new ArgumentNullException("data");
-
-            Data = data;
-            Offset = 0;
-            Size = data.Length;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelDataMessage"/> class.
-        /// </summary>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        /// <param name="data">The message data.</param>
-        /// <param name="offset">The zero-based byte offset in <paramref name="data"/> at which to begin reading or writing data from.</param>
-        /// <param name="size">The number of bytes of <paramref name="data"/> to read or write.</param>
-        public ChannelDataMessage(uint localChannelNumber, byte[] data, int offset, int size)
-            : base(localChannelNumber)
-        {
-            if (data == null)
-                throw new ArgumentNullException("data");
-
-            Data = data;
-            Offset = offset;
-            Size = size;
-        }
-
-        /// <summary>
-        /// Loads the data.
-        /// </summary>
-        protected override void LoadData()
-        {
-            base.LoadData();
-            Data = ReadBinary();
-            Offset = 0;
-            Size = Data.Length;
-        }
-
-        /// <summary>
-        /// Saves the data.
-        /// </summary>
-        protected override void SaveData()
-        {
-            base.SaveData();
-            WriteBinary(Data, Offset, Size);
-        }
     }
+
+    public ChannelDataMessage(uint localChannelNumber, byte[] data)
+      : base(localChannelNumber)
+    {
+      this.Data = data != null ? data : throw new ArgumentNullException(nameof (data));
+      this.Offset = 0;
+      this.Size = data.Length;
+    }
+
+    public ChannelDataMessage(uint localChannelNumber, byte[] data, int offset, int size)
+      : base(localChannelNumber)
+    {
+      this.Data = data != null ? data : throw new ArgumentNullException(nameof (data));
+      this.Offset = offset;
+      this.Size = size;
+    }
+
+    protected override void LoadData()
+    {
+      base.LoadData();
+      this.Data = this.ReadBinary();
+      this.Offset = 0;
+      this.Size = this.Data.Length;
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.WriteBinary(this.Data, this.Offset, this.Size);
+    }
+  }
 }

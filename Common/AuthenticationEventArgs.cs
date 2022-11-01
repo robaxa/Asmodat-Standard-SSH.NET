@@ -1,24 +1,17 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.AuthenticationEventArgs
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Common
 {
-    /// <summary>
-    /// Base class for authentication events.
-    /// </summary>
-    public abstract class AuthenticationEventArgs : EventArgs
-    {
-        /// <summary>
-        /// Gets the username.
-        /// </summary>
-        public string Username { get; private set; }
+  public abstract class AuthenticationEventArgs : EventArgs
+  {
+    public string Username { get; private set; }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AuthenticationEventArgs"/> class.
-        /// </summary>
-        /// <param name="username">The username.</param>
-        protected AuthenticationEventArgs(string username)
-        {
-            Username = username;
-        }
-    }
+    protected AuthenticationEventArgs(string username) => this.Username = username;
+  }
 }

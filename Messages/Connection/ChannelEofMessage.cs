@@ -1,31 +1,23 @@
-﻿namespace Renci.SshNet.Messages.Connection
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Connection.ChannelEofMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Messages.Connection
 {
-    /// <summary>
-    /// Represents SSH_MSG_CHANNEL_EOF message.
-    /// </summary>
-    [Message("SSH_MSG_CHANNEL_EOF", 96)]
-    public class ChannelEofMessage : ChannelMessage
+  [Message("SSH_MSG_CHANNEL_EOF", 96)]
+  public class ChannelEofMessage : ChannelMessage
+  {
+    public ChannelEofMessage()
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelEofMessage"/> class.
-        /// </summary>
-        public ChannelEofMessage()
-        {
-
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelEofMessage"/> class.
-        /// </summary>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        public ChannelEofMessage(uint localChannelNumber)
-            : base(localChannelNumber)
-        {
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnChannelEofReceived(this);
-        }
     }
+
+    public ChannelEofMessage(uint localChannelNumber)
+      : base(localChannelNumber)
+    {
+    }
+
+    internal override void Process(Session session) => session.OnChannelEofReceived(this);
+  }
 }

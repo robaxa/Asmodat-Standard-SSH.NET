@@ -1,47 +1,28 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.Cryptography.Ciphers.Paddings.PKCS5Padding
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Security.Cryptography.Ciphers.Paddings
 {
-    /// <summary>
-    /// Implements PKCS5 cipher padding
-    /// </summary>
-    public class PKCS5Padding : CipherPadding
+  public class PKCS5Padding : CipherPadding
+  {
+    public override byte[] Pad(int blockSize, byte[] input, int offset, int length)
     {
-        /// <summary>
-        /// Pads the specified input to match the block size.
-        /// </summary>
-        /// <param name="blockSize">The size of the block.</param>
-        /// <param name="input">The input.</param>
-        /// <param name="offset">The zero-based offset in <paramref name="input"/> at which the data to pad starts.</param>
-        /// <param name="length">The number of bytes in <paramref name="input"/> to take into account.</param>
-        /// <returns>
-        /// The padded data array.
-        /// </returns>
-        public override byte[] Pad(int blockSize, byte[] input, int offset, int length)
-        {
-            var numOfPaddedBytes = blockSize - (length % blockSize);
-            return Pad(input, offset, length, numOfPaddedBytes);
-        }
-
-        /// <summary>
-        /// Pads the specified input with a given number of bytes.
-        /// </summary>
-        /// <param name="input">The input.</param>
-        /// <param name="offset">The zero-based offset in <paramref name="input"/> at which the data to pad starts.</param>
-        /// <param name="length">The number of bytes in <paramref name="input"/> to take into account.</param>
-        /// <param name="paddinglength">The number of bytes to pad the input with.</param>
-        /// <returns>
-        /// The padded data array.
-        /// </returns>
-        public override byte[] Pad(byte[] input, int offset, int length, int paddinglength)
-        {
-            var output = new byte[length + paddinglength];
-            Buffer.BlockCopy(input, offset, output, 0, length);
-            for (var i = 0; i < paddinglength; i++)
-            {
-                output[length + i] = (byte) paddinglength;
-            }
-            return output;
-        }
+      int paddinglength = blockSize - length % blockSize;
+      return this.Pad(input, offset, length, paddinglength);
     }
+
+    public override byte[] Pad(byte[] input, int offset, int length, int paddinglength)
+    {
+      byte[] dst = new byte[length + paddinglength];
+      Buffer.BlockCopy((Array) input, offset, (Array) dst, 0, length);
+      for (int index = 0; index < paddinglength; ++index)
+        dst[length + index] = (byte) paddinglength;
+      return dst;
+    }
+  }
 }

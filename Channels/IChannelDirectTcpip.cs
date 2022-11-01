@@ -1,47 +1,25 @@
-﻿using System;
-using System.Net.Sockets;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Channels.IChannelDirectTcpip
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using System;
+using System.Net.Sockets;
 
 namespace Renci.SshNet.Channels
 {
-    /// <summary>
-    /// A "direct-tcpip" SSH channel.
-    /// </summary>
-    internal interface IChannelDirectTcpip : IDisposable
-    {
-        /// <summary>
-        /// Occurs when an exception is thrown while processing channel messages.
-        /// </summary>
-        event EventHandler<ExceptionEventArgs> Exception;
+  internal interface IChannelDirectTcpip : IDisposable
+  {
+    event EventHandler<ExceptionEventArgs> Exception;
 
-        /// <summary>
-        /// Gets a value indicating whether this channel is open.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if this channel is open; otherwise, <c>false</c>.
-        /// </value>
-        bool IsOpen { get; }
+    bool IsOpen { get; }
 
-        /// <summary>
-        /// Gets the local channel number.
-        /// </summary>
-        /// <value>
-        /// The local channel number.
-        /// </value>
-        uint LocalChannelNumber { get; }
+    uint LocalChannelNumber { get; }
 
-        /// <summary>
-        /// Opens a channel for a locally forwarded TCP/IP port.
-        /// </summary>
-        /// <param name="remoteHost">The name of the remote host to forward to.</param>
-        /// <param name="port">The port of the remote hosts to forward to.</param>
-        /// <param name="forwardedPort">The forwarded port for which the channel is opened.</param>
-        /// <param name="socket">The socket to receive requests from, and send responses from the remote host to.</param>
-        void Open(string remoteHost, uint port, IForwardedPort forwardedPort, Socket socket);
+    void Open(string remoteHost, uint port, IForwardedPort forwardedPort, Socket socket);
 
-        /// <summary>
-        /// Binds the channel to the remote host.
-        /// </summary>
-        void Bind();
-    }
+    void Bind();
+  }
 }

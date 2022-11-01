@@ -1,50 +1,24 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.CertificateHostAlgorithm
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Security
 {
-    /// <summary>
-    /// Implements certificate support for host algorithm.
-    /// </summary>
-    public class CertificateHostAlgorithm : HostAlgorithm
+  public class CertificateHostAlgorithm : HostAlgorithm
+  {
+    public override byte[] Data => throw new NotImplementedException();
+
+    public CertificateHostAlgorithm(string name)
+      : base(name)
     {
-        /// <summary>
-        /// Gets the host key data.
-        /// </summary>
-        public override byte[] Data
-        {
-            get { throw new NotImplementedException(); }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CertificateHostAlgorithm"/> class.
-        /// </summary>
-        /// <param name="name">The host key name.</param>
-        public CertificateHostAlgorithm(string name)
-            : base(name)
-        {
-        }
-
-        /// <summary>
-        /// Signs the specified data.
-        /// </summary>
-        /// <param name="data">The data.</param>
-        /// <returns>Signed data.</returns>
-        /// <exception cref="NotImplementedException"></exception>
-        public override byte[] Sign(byte[] data)
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// Verifies the signature.
-        /// </summary>
-        /// <param name="data">The data.</param>
-        /// <param name="signature">The signature.</param>
-        /// <returns><c>true</c> if signature was successfully verified; otherwise <c>false</c>.</returns>
-        /// <exception cref="NotImplementedException"></exception>
-        public override bool VerifySignature(byte[] data, byte[] signature)
-        {
-            throw new NotImplementedException();
-        }
     }
+
+    public override byte[] Sign(byte[] data) => throw new NotImplementedException();
+
+    public override bool VerifySignature(byte[] data, byte[] signature) => throw new NotImplementedException();
+  }
 }

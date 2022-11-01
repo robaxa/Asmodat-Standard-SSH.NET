@@ -1,62 +1,32 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Authentication.InformationResponseMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 using System.Collections.Generic;
 
 namespace Renci.SshNet.Messages.Authentication
 {
-    /// <summary>
-    /// Represents SSH_MSG_USERAUTH_INFO_RESPONSE message.
-    /// </summary>
-    [Message("SSH_MSG_USERAUTH_INFO_RESPONSE", 61)]
-    internal class InformationResponseMessage : Message
+  [Message("SSH_MSG_USERAUTH_INFO_RESPONSE", 61)]
+  internal class InformationResponseMessage : Message
+  {
+    public IList<string> Responses { get; private set; }
+
+    protected override int BufferCapacity => -1;
+
+    public InformationResponseMessage() => this.Responses = (IList<string>) new List<string>();
+
+    protected override void LoadData() => throw new NotImplementedException();
+
+    protected override void SaveData()
     {
-        /// <summary>
-        /// Gets authentication responses.
-        /// </summary>
-        public IList<string> Responses { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// <c>-1</c> to indicate that the size of the message cannot be determined,
-        /// or is too costly to calculate.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get { return -1; }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="InformationResponseMessage"/> class.
-        /// </summary>
-        public InformationResponseMessage()
-        {
-            Responses = new List<string>();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            Write((uint) Responses.Count);
-            foreach (var response in Responses)
-            {
-                Write(response);
-            }
-        }
-
-        internal override void Process(Session session)
-        {
-            throw new NotImplementedException();
-        }
+      this.Write((uint) this.Responses.Count);
+      foreach (string response in (IEnumerable<string>) this.Responses)
+        this.Write(response);
     }
+
+    internal override void Process(Session session) => throw new NotImplementedException();
+  }
 }

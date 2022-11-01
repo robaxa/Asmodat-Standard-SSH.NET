@@ -1,96 +1,40 @@
-﻿using System;
-using System.Security.Cryptography;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.IKeyExchange
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
 using Renci.SshNet.Compression;
 using Renci.SshNet.Messages.Transport;
 using Renci.SshNet.Security.Cryptography;
+using System;
+using System.Security.Cryptography;
 
 namespace Renci.SshNet.Security
 {
-    /// <summary>
-    /// Represents a key exchange algorithm.
-    /// </summary>
-    public interface IKeyExchange : IDisposable
-    {
-        /// <summary>
-        /// Occurs when the host key is received.
-        /// </summary>
-        event EventHandler<HostKeyEventArgs> HostKeyReceived;
+  public interface IKeyExchange : IDisposable
+  {
+    event EventHandler<HostKeyEventArgs> HostKeyReceived;
 
-        /// <summary>
-        /// Gets the name of the algorithm.
-        /// </summary>
-        /// <value>
-        /// The name of the algorithm.
-        /// </value>
-        string Name { get; }
+    string Name { get; }
 
-        /// <summary>
-        /// Gets the exchange hash.
-        /// </summary>
-        /// <value>
-        /// The exchange hash.
-        /// </value>
-        byte[] ExchangeHash { get; }
+    byte[] ExchangeHash { get; }
 
-        /// <summary>
-        /// Starts the key exchange algorithm.
-        /// </summary>
-        /// <param name="session">The session.</param>
-        /// <param name="message">Key exchange init message.</param>
-        void Start(Session session, KeyExchangeInitMessage message);
+    void Start(Session session, KeyExchangeInitMessage message);
 
-        /// <summary>
-        /// Finishes the key exchange algorithm.
-        /// </summary>
-        void Finish();
+    void Finish();
 
-        /// <summary>
-        /// Creates the client-side cipher to use.
-        /// </summary>
-        /// <returns>
-        /// The client cipher.
-        /// </returns>
-        Cipher CreateClientCipher();
+    Cipher CreateClientCipher();
 
-        /// <summary>
-        /// Creates the server-side cipher to use.
-        /// </summary>
-        /// <returns>
-        /// The server cipher.
-        /// </returns>
-        Cipher CreateServerCipher();
+    Cipher CreateServerCipher();
 
-        /// <summary>
-        /// Creates the server-side hash algorithm to use.
-        /// </summary>
-        /// <returns>
-        /// The server hash algorithm.
-        /// </returns>
-        HashAlgorithm CreateServerHash();
+    HashAlgorithm CreateServerHash();
 
-        /// <summary>
-        /// Creates the client-side hash algorithm to use.
-        /// </summary>
-        /// <returns>
-        /// The client hash algorithm.
-        /// </returns>
-        HashAlgorithm CreateClientHash();
+    HashAlgorithm CreateClientHash();
 
-        /// <summary>
-        /// Creates the compression algorithm to use to deflate data.
-        /// </summary>
-        /// <returns>
-        /// The compression method to deflate data.
-        /// </returns>
-        Compressor CreateCompressor();
+    Compressor CreateCompressor();
 
-        /// <summary>
-        /// Creates the compression algorithm to use to inflate data.
-        /// </summary>
-        /// <returns>
-        /// The compression method to inflate data.
-        /// </returns>
-        Compressor CreateDecompressor();
-    }
+    Compressor CreateDecompressor();
+  }
 }

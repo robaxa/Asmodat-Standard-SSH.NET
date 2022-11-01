@@ -1,206 +1,273 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.ForwardedPortLocal
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Abstractions;
+using Renci.SshNet.Channels;
 using Renci.SshNet.Common;
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
 
 namespace Renci.SshNet
 {
-    /// <summary>
-    /// Provides functionality for local port forwarding
-    /// </summary>
-    public partial class ForwardedPortLocal : ForwardedPort, IDisposable
+  public class ForwardedPortLocal : ForwardedPort, IDisposable
+  {
+    private ForwardedPortStatus _status;
+    private bool _isDisposed;
+    private Socket _listener;
+    private CountdownEvent _pendingChannelCountdown;
+
+    public string BoundHost { get; private set; }
+
+    public uint BoundPort { get; private set; }
+
+    public string Host { get; private set; }
+
+    public uint Port { get; private set; }
+
+    public override bool IsStarted => this._status == ForwardedPortStatus.Started;
+
+    public ForwardedPortLocal(uint boundPort, string host, uint port)
+      : this(string.Empty, boundPort, host, port)
     {
-        private ForwardedPortStatus _status;
-
-        /// <summary>
-        /// Gets the bound host.
-        /// </summary>
-        public string BoundHost { get; private set; }
-
-        /// <summary>
-        /// Gets the bound port.
-        /// </summary>
-        public uint BoundPort { get; private set; }
-
-        /// <summary>
-        /// Gets the forwarded host.
-        /// </summary>
-        public string Host { get; private set; }
-
-        /// <summary>
-        /// Gets the forwarded port.
-        /// </summary>
-        public uint Port { get; private set; }
-
-        /// <summary>
-        /// Gets a value indicating whether port forwarding is started.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if port forwarding is started; otherwise, <c>false</c>.
-        /// </value>
-        public override bool IsStarted
-        {
-            get { return _status == ForwardedPortStatus.Started; }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ForwardedPortLocal"/> class.
-        /// </summary>
-        /// <param name="boundPort">The bound port.</param>
-        /// <param name="host">The host.</param>
-        /// <param name="port">The port.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundPort" /> is greater than <see cref="F:System.Net.IPEndPoint.MaxPort" />.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="host"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="port" /> is greater than <see cref="F:System.Net.IPEndPoint.MaxPort" />.</exception>
-        /// <example>
-        ///     <code source="..\..\src\Renci.SshNet.Tests\Classes\ForwardedPortLocalTest.cs" region="Example SshClient AddForwardedPort Start Stop ForwardedPortLocal" language="C#" title="Local port forwarding" />
-        /// </example>
-        public ForwardedPortLocal(uint boundPort, string host, uint port)
-            : this(string.Empty, boundPort, host, port)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ForwardedPortLocal"/> class.
-        /// </summary>
-        /// <param name="boundHost">The bound host.</param>
-        /// <param name="host">The host.</param>
-        /// <param name="port">The port.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="boundHost"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="host"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="port" /> is greater than <see cref="F:System.Net.IPEndPoint.MaxPort" />.</exception>
-        public ForwardedPortLocal(string boundHost, string host, uint port)
-            : this(boundHost, 0, host, port) 
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ForwardedPortLocal"/> class.
-        /// </summary>
-        /// <param name="boundHost">The bound host.</param>
-        /// <param name="boundPort">The bound port.</param>
-        /// <param name="host">The host.</param>
-        /// <param name="port">The port.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="boundHost"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="host"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundPort" /> is greater than <see cref="F:System.Net.IPEndPoint.MaxPort" />.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="port" /> is greater than <see cref="F:System.Net.IPEndPoint.MaxPort" />.</exception>
-        public ForwardedPortLocal(string boundHost, uint boundPort, string host, uint port)
-        {
-            if (boundHost == null)
-                throw new ArgumentNullException("boundHost");
-
-            if (host == null)
-                throw new ArgumentNullException("host");
-
-            boundPort.ValidatePort("boundPort");
-            port.ValidatePort("port");
-
-            BoundHost = boundHost;
-            BoundPort = boundPort;
-            Host = host;
-            Port = port;
-            _status = ForwardedPortStatus.Stopped;
-        }
-
-        /// <summary>
-        /// Starts local port forwarding.
-        /// </summary>
-        protected override void StartPort()
-        {
-            if (!ForwardedPortStatus.ToStarting(ref _status))
-                return;
-
-            try
-            {
-                InternalStart();
-            }
-            catch (Exception)
-            {
-                _status = ForwardedPortStatus.Stopped;
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Stops local port forwarding, and waits for the specified timeout until all pending
-        /// requests are processed.
-        /// </summary>
-        /// <param name="timeout">The maximum amount of time to wait for pending requests to finish processing.</param>
-        protected override void StopPort(TimeSpan timeout)
-        {
-            if (!ForwardedPortStatus.ToStopping(ref _status))
-                return;
-
-            // signal existing channels that the port is closing
-            base.StopPort(timeout);
-            // prevent new requests from getting processed
-            StopListener();
-            // wait for open channels to close
-            InternalStop(timeout);
-            // mark port stopped
-            _status = ForwardedPortStatus.Stopped;
-        }
-
-        /// <summary>
-        /// Ensures the current instance is not disposed.
-        /// </summary>
-        /// <exception cref="ObjectDisposedException">The current instance is disposed.</exception>
-        protected override void CheckDisposed()
-        {
-            if (_isDisposed)
-                throw new ObjectDisposedException(GetType().FullName);
-        }
-
-        partial void InternalStart();
-
-        /// <summary>
-        /// Interrupts the listener, and waits for the listener loop to finish.
-        /// </summary>
-        /// <remarks>
-        /// When the forwarded port is stopped, then any further action is skipped.
-        /// </remarks>
-        partial void StopListener();
-
-        partial void InternalStop(TimeSpan timeout);
-
-        #region IDisposable Members
-
-        private bool _isDisposed;
-
-        /// <summary>
-        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        partial void InternalDispose(bool disposing);
-
-        /// <summary>
-        /// Releases unmanaged and - optionally - managed resources
-        /// </summary>
-        /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
-        protected override void Dispose(bool disposing)
-        {
-            if (_isDisposed)
-                return;
-
-            base.Dispose(disposing);
-            InternalDispose(disposing);
-
-            _isDisposed = true;
-        }
-
-        /// <summary>
-        /// Releases unmanaged resources and performs other cleanup operations before the
-        /// <see cref="ForwardedPortLocal"/> is reclaimed by garbage collection.
-        /// </summary>
-        ~ForwardedPortLocal()
-        {
-            Dispose(false);
-        }
-
-        #endregion
     }
+
+    public ForwardedPortLocal(string boundHost, string host, uint port)
+      : this(boundHost, 0U, host, port)
+    {
+    }
+
+    public ForwardedPortLocal(string boundHost, uint boundPort, string host, uint port)
+    {
+      if (boundHost == null)
+        throw new ArgumentNullException(nameof (boundHost));
+      if (host == null)
+        throw new ArgumentNullException(nameof (host));
+      boundPort.ValidatePort(nameof (boundPort));
+      port.ValidatePort(nameof (port));
+      this.BoundHost = boundHost;
+      this.BoundPort = boundPort;
+      this.Host = host;
+      this.Port = port;
+      this._status = ForwardedPortStatus.Stopped;
+    }
+
+    protected override void StartPort()
+    {
+      if (!ForwardedPortStatus.ToStarting(ref this._status))
+        return;
+      try
+      {
+        this.InternalStart();
+      }
+      catch (Exception ex)
+      {
+        this._status = ForwardedPortStatus.Stopped;
+        throw;
+      }
+    }
+
+    protected override void StopPort(TimeSpan timeout)
+    {
+      if (!ForwardedPortStatus.ToStopping(ref this._status))
+        return;
+      base.StopPort(timeout);
+      this.StopListener();
+      this.InternalStop(timeout);
+      this._status = ForwardedPortStatus.Stopped;
+    }
+
+    protected override void CheckDisposed()
+    {
+      if (this._isDisposed)
+        throw new ObjectDisposedException(this.GetType().FullName);
+    }
+
+    private void InternalStart()
+    {
+      IPEndPoint localEP = new IPEndPoint(DnsAbstraction.GetHostAddresses(this.BoundHost)[0], (int) this.BoundPort);
+      this._listener = new Socket(localEP.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+      {
+        NoDelay = true
+      };
+      this._listener.Bind((EndPoint) localEP);
+      this._listener.Listen(5);
+      this.BoundPort = (uint) ((IPEndPoint) this._listener.LocalEndPoint).Port;
+      this.Session.ErrorOccured += new EventHandler<ExceptionEventArgs>(this.Session_ErrorOccured);
+      this.Session.Disconnected += new EventHandler<EventArgs>(this.Session_Disconnected);
+      this.InitializePendingChannelCountdown();
+      this._status = ForwardedPortStatus.Started;
+      this.StartAccept((SocketAsyncEventArgs) null);
+    }
+
+    private void StopListener()
+    {
+      this._listener?.Dispose();
+      ISession session = this.Session;
+      if (session == null)
+        return;
+      session.ErrorOccured -= new EventHandler<ExceptionEventArgs>(this.Session_ErrorOccured);
+      session.Disconnected -= new EventHandler<EventArgs>(this.Session_Disconnected);
+    }
+
+    private void InternalStop(TimeSpan timeout)
+    {
+      this._pendingChannelCountdown.Signal();
+      this._pendingChannelCountdown.Wait(timeout);
+    }
+
+    public void Dispose()
+    {
+      this.Dispose(true);
+      GC.SuppressFinalize((object) this);
+    }
+
+    private void InternalDispose(bool disposing)
+    {
+      if (!disposing)
+        return;
+      Socket listener = this._listener;
+      if (listener != null)
+      {
+        this._listener = (Socket) null;
+        listener.Dispose();
+      }
+      CountdownEvent channelCountdown = this._pendingChannelCountdown;
+      if (channelCountdown != null)
+      {
+        this._pendingChannelCountdown = (CountdownEvent) null;
+        channelCountdown.Dispose();
+      }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+      if (this._isDisposed)
+        return;
+      base.Dispose(disposing);
+      this.InternalDispose(disposing);
+      this._isDisposed = true;
+    }
+
+    ~ForwardedPortLocal() => this.Dispose(false);
+
+    private void StartAccept(SocketAsyncEventArgs e)
+    {
+      if (e == null)
+      {
+        e = new SocketAsyncEventArgs();
+        e.Completed += new EventHandler<SocketAsyncEventArgs>(this.AcceptCompleted);
+      }
+      else
+        e.AcceptSocket = (Socket) null;
+      if (!this.IsStarted)
+        return;
+      try
+      {
+        if (!this._listener.AcceptAsync(e))
+          this.AcceptCompleted((object) null, e);
+      }
+      catch (ObjectDisposedException ex)
+      {
+        if (this._status == ForwardedPortStatus.Stopped || this._status == ForwardedPortStatus.Stopped)
+          return;
+        throw;
+      }
+    }
+
+    private void AcceptCompleted(object sender, SocketAsyncEventArgs e)
+    {
+      if (e.SocketError == SocketError.OperationAborted || e.SocketError == SocketError.NotSocket)
+        return;
+      Socket acceptSocket = e.AcceptSocket;
+      if (e.SocketError != 0)
+      {
+        this.StartAccept(e);
+        ForwardedPortLocal.CloseClientSocket(acceptSocket);
+      }
+      else
+      {
+        this.StartAccept(e);
+        this.ProcessAccept(acceptSocket);
+      }
+    }
+
+    private void ProcessAccept(Socket clientSocket)
+    {
+      if (!this.IsStarted)
+      {
+        ForwardedPortLocal.CloseClientSocket(clientSocket);
+      }
+      else
+      {
+        CountdownEvent channelCountdown = this._pendingChannelCountdown;
+        channelCountdown.AddCount();
+        try
+        {
+          IPEndPoint remoteEndPoint = (IPEndPoint) clientSocket.RemoteEndPoint;
+          this.RaiseRequestReceived(remoteEndPoint.Address.ToString(), (uint) remoteEndPoint.Port);
+          using (IChannelDirectTcpip channelDirectTcpip = this.Session.CreateChannelDirectTcpip())
+          {
+            channelDirectTcpip.Exception += new EventHandler<ExceptionEventArgs>(this.Channel_Exception);
+            channelDirectTcpip.Open(this.Host, this.Port, (IForwardedPort) this, clientSocket);
+            channelDirectTcpip.Bind();
+          }
+        }
+        catch (Exception ex)
+        {
+          this.RaiseExceptionEvent(ex);
+          ForwardedPortLocal.CloseClientSocket(clientSocket);
+        }
+        finally
+        {
+          try
+          {
+            channelCountdown.Signal();
+          }
+          catch (ObjectDisposedException ex)
+          {
+          }
+        }
+      }
+    }
+
+    private void InitializePendingChannelCountdown() => Interlocked.Exchange<CountdownEvent>(ref this._pendingChannelCountdown, new CountdownEvent(1))?.Dispose();
+
+    private static void CloseClientSocket(Socket clientSocket)
+    {
+      if (clientSocket.Connected)
+      {
+        try
+        {
+          clientSocket.Shutdown(SocketShutdown.Send);
+        }
+        catch (Exception ex)
+        {
+        }
+      }
+      clientSocket.Dispose();
+    }
+
+    private void Session_Disconnected(object sender, EventArgs e)
+    {
+      ISession session = this.Session;
+      if (session == null)
+        return;
+      this.StopPort(session.ConnectionInfo.Timeout);
+    }
+
+    private void Session_ErrorOccured(object sender, ExceptionEventArgs e)
+    {
+      ISession session = this.Session;
+      if (session == null)
+        return;
+      this.StopPort(session.ConnectionInfo.Timeout);
+    }
+
+    private void Channel_Exception(object sender, ExceptionEventArgs e) => this.RaiseExceptionEvent(e.Exception);
+  }
 }

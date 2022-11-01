@@ -1,62 +1,33 @@
-﻿using Renci.SshNet.Common;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Authentication.RequestMessageKeyboardInteractive
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
 
 namespace Renci.SshNet.Messages.Authentication
 {
-    /// <summary>
-    /// Represents "keyboard-interactive" SSH_MSG_USERAUTH_REQUEST message.
-    /// </summary>
-    internal class RequestMessageKeyboardInteractive : RequestMessage
+  internal class RequestMessageKeyboardInteractive : RequestMessage
+  {
+    public byte[] Language { get; private set; }
+
+    public byte[] SubMethods { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this.Language.Length + 4 + this.SubMethods.Length;
+
+    public RequestMessageKeyboardInteractive(ServiceName serviceName, string username)
+      : base(serviceName, username, "keyboard-interactive")
     {
-        /// <summary>
-        /// Gets message language.
-        /// </summary>
-        public byte[] Language { get; private set; }
-
-        /// <summary>
-        /// Gets authentication sub methods.
-        /// </summary>
-        public byte[] SubMethods { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // Language length
-                capacity += Language.Length; // Language
-                capacity += 4; // SubMethods length
-                capacity += SubMethods.Length; // SubMethods
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RequestMessageKeyboardInteractive"/> class.
-        /// </summary>
-        /// <param name="serviceName">Name of the service.</param>
-        /// <param name="username">Authentication username.</param>
-        public RequestMessageKeyboardInteractive(ServiceName serviceName, string username)
-            : base(serviceName, username, "keyboard-interactive")
-        {
-            Language = Array<byte>.Empty;
-            SubMethods = Array<byte>.Empty;
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            base.SaveData();
-
-            WriteBinaryString(Language);
-            WriteBinaryString(SubMethods);
-        }
+      this.Language = Array<byte>.Empty;
+      this.SubMethods = Array<byte>.Empty;
     }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.WriteBinaryString(this.Language);
+      this.WriteBinaryString(this.SubMethods);
+    }
+  }
 }

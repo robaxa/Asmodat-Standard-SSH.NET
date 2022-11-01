@@ -1,37 +1,26 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.PortForwardEventArgs
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Common
 {
-    /// <summary>
-    /// Provides data for <see cref="Renci.SshNet.ForwardedPort.RequestReceived"/> event.
-    /// </summary>
-    public class PortForwardEventArgs : EventArgs
+  public class PortForwardEventArgs : EventArgs
+  {
+    public string OriginatorHost { get; private set; }
+
+    public uint OriginatorPort { get; private set; }
+
+    internal PortForwardEventArgs(string host, uint port)
     {
-        /// <summary>
-        /// Gets request originator host.
-        /// </summary>
-        public string OriginatorHost { get; private set; }
-
-        /// <summary>
-        /// Gets request originator port.
-        /// </summary>
-        public uint OriginatorPort { get; private set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PortForwardEventArgs"/> class.
-        /// </summary>
-        /// <param name="host">The host.</param>
-        /// <param name="port">The port.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="host"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="port" /> is not within <see cref="F:System.Net.IPEndPoint.MinPort" /> and <see cref="F:System.Net.IPEndPoint.MaxPort" />.</exception>
-        internal PortForwardEventArgs(string host, uint port)
-        {
-            if (host == null)
-                throw new ArgumentNullException("host");
-            port.ValidatePort("port");
-
-            OriginatorHost = host;
-            OriginatorPort = port;
-        }
+      if (host == null)
+        throw new ArgumentNullException(nameof (host));
+      port.ValidatePort(nameof (port));
+      this.OriginatorHost = host;
+      this.OriginatorPort = port;
     }
+  }
 }

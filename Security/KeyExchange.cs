@@ -1,507 +1,260 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Cryptography;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.KeyExchange
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Abstractions;
 using Renci.SshNet.Common;
 using Renci.SshNet.Compression;
 using Renci.SshNet.Messages;
 using Renci.SshNet.Messages.Transport;
 using Renci.SshNet.Security.Cryptography;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography;
 
 namespace Renci.SshNet.Security
 {
-    /// <summary>
-    /// Represents base class for different key exchange algorithm implementations
-    /// </summary>
-    public abstract class KeyExchange : Algorithm, IKeyExchange
+  public abstract class KeyExchange : Algorithm, IKeyExchange, IDisposable
+  {
+    private CipherInfo _clientCipherInfo;
+    private CipherInfo _serverCipherInfo;
+    private HashInfo _clientHashInfo;
+    private HashInfo _serverHashInfo;
+    private Type _compressionType;
+    private Type _decompressionType;
+    private byte[] _exchangeHash;
+
+    protected Session Session { get; private set; }
+
+    public BigInteger SharedKey { get; protected set; }
+
+    public byte[] ExchangeHash
     {
-        private CipherInfo _clientCipherInfo;
-        private CipherInfo _serverCipherInfo;
-        private HashInfo _clientHashInfo;
-        private HashInfo _serverHashInfo;
-        private Type _compressionType;
-        private Type _decompressionType;
-
-        /// <summary>
-        /// Gets or sets the session.
-        /// </summary>
-        /// <value>
-        /// The session.
-        /// </value>
-        protected Session Session { get; private set; }
-
-        /// <summary>
-        /// Gets or sets key exchange shared key.
-        /// </summary>
-        /// <value>
-        /// The shared key.
-        /// </value>
-        public BigInteger SharedKey { get; protected set; }
-
-        private byte[] _exchangeHash;
-
-        /// <summary>
-        /// Gets the exchange hash.
-        /// </summary>
-        /// <value>The exchange hash.</value>
-        public byte[] ExchangeHash
-        {
-            get
-            {
-                if (_exchangeHash == null)
-                {
-                    _exchangeHash = CalculateHash();
-                }
-                return _exchangeHash;
-            }
-        }
-
-        /// <summary>
-        /// Occurs when host key received.
-        /// </summary>
-        public event EventHandler<HostKeyEventArgs> HostKeyReceived;
-
-        /// <summary>
-        /// Starts key exchange algorithm
-        /// </summary>
-        /// <param name="session">The session.</param>
-        /// <param name="message">Key exchange init message.</param>
-        public virtual void Start(Session session, KeyExchangeInitMessage message)
-        {
-            Session = session;
-
-            SendMessage(session.ClientInitMessage);
-
-            //  Determine encryption algorithm
-            var clientEncryptionAlgorithmName = (from b in session.ConnectionInfo.Encryptions.Keys
-                                                 from a in message.EncryptionAlgorithmsClientToServer
-                                                 where a == b
-                                                 select a).FirstOrDefault();
-
-            if (string.IsNullOrEmpty(clientEncryptionAlgorithmName))
-            {
-                throw new SshConnectionException("Client encryption algorithm not found", DisconnectReason.KeyExchangeFailed);
-            }
-
-            session.ConnectionInfo.CurrentClientEncryption = clientEncryptionAlgorithmName;
-
-            //  Determine encryption algorithm
-            var serverDecryptionAlgorithmName = (from b in session.ConnectionInfo.Encryptions.Keys
-                                                 from a in message.EncryptionAlgorithmsServerToClient
-                                                 where a == b
-                                                 select a).FirstOrDefault();
-            if (string.IsNullOrEmpty(serverDecryptionAlgorithmName))
-            {
-                throw new SshConnectionException("Server decryption algorithm not found", DisconnectReason.KeyExchangeFailed);
-            }
-
-            session.ConnectionInfo.CurrentServerEncryption = serverDecryptionAlgorithmName;
-
-            //  Determine client hmac algorithm
-            var clientHmacAlgorithmName = (from b in session.ConnectionInfo.HmacAlgorithms.Keys
-                                           from a in message.MacAlgorithmsClientToServer
-                                           where a == b
-                                           select a).FirstOrDefault();
-            if (string.IsNullOrEmpty(clientHmacAlgorithmName))
-            {
-                throw new SshConnectionException("Server HMAC algorithm not found", DisconnectReason.KeyExchangeFailed);
-            }
-
-            session.ConnectionInfo.CurrentClientHmacAlgorithm = clientHmacAlgorithmName;
-
-            //  Determine server hmac algorithm
-            var serverHmacAlgorithmName = (from b in session.ConnectionInfo.HmacAlgorithms.Keys
-                                           from a in message.MacAlgorithmsServerToClient
-                                           where a == b
-                                           select a).FirstOrDefault();
-            if (string.IsNullOrEmpty(serverHmacAlgorithmName))
-            {
-                throw new SshConnectionException("Server HMAC algorithm not found", DisconnectReason.KeyExchangeFailed);
-            }
-
-            session.ConnectionInfo.CurrentServerHmacAlgorithm = serverHmacAlgorithmName;
-
-            //  Determine compression algorithm
-            var compressionAlgorithmName = (from b in session.ConnectionInfo.CompressionAlgorithms.Keys
-                                            from a in message.CompressionAlgorithmsClientToServer
-                                            where a == b
-                                            select a).LastOrDefault();
-            if (string.IsNullOrEmpty(compressionAlgorithmName))
-            {
-                throw new SshConnectionException("Compression algorithm not found", DisconnectReason.KeyExchangeFailed);
-            }
-
-            session.ConnectionInfo.CurrentClientCompressionAlgorithm = compressionAlgorithmName;
-
-            //  Determine decompression algorithm
-            var decompressionAlgorithmName = (from b in session.ConnectionInfo.CompressionAlgorithms.Keys
-                                              from a in message.CompressionAlgorithmsServerToClient
-                                              where a == b
-                                              select a).LastOrDefault();
-            if (string.IsNullOrEmpty(decompressionAlgorithmName))
-            {
-                throw new SshConnectionException("Decompression algorithm not found", DisconnectReason.KeyExchangeFailed);
-            }
-
-            session.ConnectionInfo.CurrentServerCompressionAlgorithm = decompressionAlgorithmName;
-
-            _clientCipherInfo = session.ConnectionInfo.Encryptions[clientEncryptionAlgorithmName];
-            _serverCipherInfo = session.ConnectionInfo.Encryptions[serverDecryptionAlgorithmName];
-            _clientHashInfo = session.ConnectionInfo.HmacAlgorithms[clientHmacAlgorithmName];
-            _serverHashInfo = session.ConnectionInfo.HmacAlgorithms[serverHmacAlgorithmName];
-            _compressionType = session.ConnectionInfo.CompressionAlgorithms[compressionAlgorithmName];
-            _decompressionType = session.ConnectionInfo.CompressionAlgorithms[decompressionAlgorithmName];
-        }
-
-        /// <summary>
-        /// Finishes key exchange algorithm.
-        /// </summary>
-        public virtual void Finish()
-        {
-            //  Validate hash
-            if (ValidateExchangeHash())
-            {
-                SendMessage(new NewKeysMessage());
-            }
-            else
-            {
-                throw new SshConnectionException("Key exchange negotiation failed.", DisconnectReason.KeyExchangeFailed);
-            }
-        }
-
-        /// <summary>
-        /// Creates the server side cipher to use.
-        /// </summary>
-        /// <returns>Server cipher.</returns>
-        public Cipher CreateServerCipher()
-        {
-            //  Resolve Session ID
-            var sessionId = Session.SessionId ?? ExchangeHash;
-
-            //  Calculate server to client initial IV
-            var serverVector = Hash(GenerateSessionKey(SharedKey, ExchangeHash, 'B', sessionId));
-
-            //  Calculate server to client encryption
-            var serverKey = Hash(GenerateSessionKey(SharedKey, ExchangeHash, 'D', sessionId));
-
-            serverKey = GenerateSessionKey(SharedKey, ExchangeHash, serverKey, _serverCipherInfo.KeySize / 8);
-
-            DiagnosticAbstraction.Log(string.Format("[{0}] Creating server cipher (Name:{1},Key:{2},IV:{3})",
-                                                    Session.ToHex(Session.SessionId),
-                                                    Session.ConnectionInfo.CurrentServerEncryption,
-                                                    Session.ToHex(serverKey),
-                                                    Session.ToHex(serverVector)));
-
-            //  Create server cipher
-            return _serverCipherInfo.Cipher(serverKey, serverVector);
-        }
-
-        /// <summary>
-        /// Creates the client side cipher to use.
-        /// </summary>
-        /// <returns>Client cipher.</returns>
-        public Cipher CreateClientCipher()
-        {
-            //  Resolve Session ID
-            var sessionId = Session.SessionId ?? ExchangeHash;
-
-            //  Calculate client to server initial IV
-            var clientVector = Hash(GenerateSessionKey(SharedKey, ExchangeHash, 'A', sessionId));
-
-            //  Calculate client to server encryption
-            var clientKey = Hash(GenerateSessionKey(SharedKey, ExchangeHash, 'C', sessionId));
-
-            clientKey = GenerateSessionKey(SharedKey, ExchangeHash, clientKey, _clientCipherInfo.KeySize / 8);
-
-            //  Create client cipher
-            return _clientCipherInfo.Cipher(clientKey, clientVector);
-        }
-
-        /// <summary>
-        /// Creates the server side hash algorithm to use.
-        /// </summary>
-        /// <returns>Hash algorithm</returns>
-        public HashAlgorithm CreateServerHash()
-        {
-            //  Resolve Session ID
-            var sessionId = Session.SessionId ?? ExchangeHash;
-
-            var serverKey = Hash(GenerateSessionKey(SharedKey, ExchangeHash, 'F', sessionId));
-
-            serverKey = GenerateSessionKey(SharedKey, ExchangeHash, serverKey, _serverHashInfo.KeySize / 8);
-
-            //return serverHMac;
-            return _serverHashInfo.HashAlgorithm(serverKey);
-        }
-
-        /// <summary>
-        /// Creates the client side hash algorithm to use.
-        /// </summary>
-        /// <returns>Hash algorithm</returns>
-        public HashAlgorithm CreateClientHash()
-        {
-            //  Resolve Session ID
-            var sessionId = Session.SessionId ?? ExchangeHash;
-
-            var clientKey = Hash(GenerateSessionKey(SharedKey, ExchangeHash, 'E', sessionId));
-            
-            clientKey = GenerateSessionKey(SharedKey, ExchangeHash, clientKey, _clientHashInfo.KeySize / 8);
-
-            //return clientHMac;
-            return _clientHashInfo.HashAlgorithm(clientKey);
-        }
-
-        /// <summary>
-        /// Creates the compression algorithm to use to deflate data.
-        /// </summary>
-        /// <returns>Compression method.</returns>
-        public Compressor CreateCompressor()
-        {
-            if (_compressionType == null)
-                return null;
-
-            var compressor = _compressionType.CreateInstance<Compressor>();
-
-            compressor.Init(Session);
-
-            return compressor;
-        }
-
-        /// <summary>
-        /// Creates the compression algorithm to use to inflate data.
-        /// </summary>
-        /// <returns>Compression method.</returns>
-        public Compressor CreateDecompressor()
-        {
-            if (_compressionType == null)
-                return null;
-
-            var decompressor = _decompressionType.CreateInstance<Compressor>();
-
-            decompressor.Init(Session);
-
-            return decompressor;
-        }
-
-        /// <summary>
-        /// Determines whether the specified host key can be trusted.
-        /// </summary>
-        /// <param name="host">The host algorithm.</param>
-        /// <returns>
-        /// <c>true</c> if the specified host can be trusted; otherwise, <c>false</c>.
-        /// </returns>
-        protected bool CanTrustHostKey(KeyHostAlgorithm host)
-        {
-            var handlers = HostKeyReceived;
-            if (handlers != null)
-            {
-                var args = new HostKeyEventArgs(host);
-                handlers(this, args);
-                return args.CanTrust;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Validates the exchange hash.
-        /// </summary>
-        /// <returns>true if exchange hash is valid; otherwise false.</returns>
-        protected abstract bool ValidateExchangeHash();
-
-        /// <summary>
-        /// Calculates key exchange hash value.
-        /// </summary>
-        /// <returns>Key exchange hash.</returns>
-        protected abstract byte[] CalculateHash();
-
-        /// <summary>
-        /// Hashes the specified data bytes.
-        /// </summary>
-        /// <param name="hashData">The hash data.</param>
-        /// <returns>
-        /// Hashed bytes
-        /// </returns>
-        protected virtual byte[] Hash(byte[] hashData)
-        {
-            using (var sha1 = CryptoAbstraction.CreateSHA1())
-            {
-                return sha1.ComputeHash(hashData, 0, hashData.Length);
-            }
-        }
-
-        /// <summary>
-        /// Sends SSH message to the server
-        /// </summary>
-        /// <param name="message">The message.</param>
-        protected void SendMessage(Message message)
-        {
-            Session.SendMessage(message);
-        }
-
-        /// <summary>
-        /// Generates the session key.
-        /// </summary>
-        /// <param name="sharedKey">The shared key.</param>
-        /// <param name="exchangeHash">The exchange hash.</param>
-        /// <param name="key">The key.</param>
-        /// <param name="size">The size.</param>
-        /// <returns></returns>
-        private byte[] GenerateSessionKey(BigInteger sharedKey, byte[] exchangeHash, byte[] key, int size)
-        {
-            var result = new List<byte>(key);
-            while (size > result.Count)
-            {
-                result.AddRange(Hash(new _SessionKeyAdjustment
-                {
-                    SharedKey = sharedKey,
-                    ExchangeHash = exchangeHash,
-                    Key = key,
-                }.GetBytes()));
-            }
-
-            return result.ToArray();
-        }
-
-        /// <summary>
-        /// Generates the session key.
-        /// </summary>
-        /// <param name="sharedKey">The shared key.</param>
-        /// <param name="exchangeHash">The exchange hash.</param>
-        /// <param name="p">The p.</param>
-        /// <param name="sessionId">The session id.</param>
-        /// <returns></returns>
-        private static byte[] GenerateSessionKey(BigInteger sharedKey, byte[] exchangeHash, char p, byte[] sessionId)
-        {
-            return new _SessionKeyGeneration
-            {
-                SharedKey = sharedKey,
-                ExchangeHash = exchangeHash,
-                Char = p,
-                SessionId = sessionId,
-            }.GetBytes();
-        }
-
-        private class _SessionKeyGeneration : SshData
-        {
-            private byte[] _sharedKey;
-
-            public BigInteger SharedKey
-            {
-                private get { return _sharedKey.ToBigInteger(); }
-                set { _sharedKey = value.ToByteArray().Reverse(); }
-            }
-            public byte[] ExchangeHash { get; set; }
-            public char Char { get; set; }
-            public byte[] SessionId { get; set; }
-
-            /// <summary>
-            /// Gets the size of the message in bytes.
-            /// </summary>
-            /// <value>
-            /// The size of the messages in bytes.
-            /// </value>
-            protected override int BufferCapacity
-            {
-                get
-                {
-                    var capacity = base.BufferCapacity;
-                    capacity += 4; // SharedKey length
-                    capacity += _sharedKey.Length; // SharedKey
-                    capacity += ExchangeHash.Length; // ExchangeHash
-                    capacity += 1; // Char
-                    capacity += SessionId.Length; // SessionId
-                    return capacity;
-                }
-            }
-
-            protected override void LoadData()
-            {
-                throw new NotImplementedException();
-            }
-
-            protected override void SaveData()
-            {
-                WriteBinaryString(_sharedKey);
-                Write(ExchangeHash);
-                Write((byte) Char);
-                Write(SessionId);
-            }
-        }
-
-        private class _SessionKeyAdjustment : SshData
-        {
-            private byte[] _sharedKey;
-
-            public BigInteger SharedKey
-            {
-                private get { return _sharedKey.ToBigInteger(); }
-                set { _sharedKey = value.ToByteArray().Reverse(); }
-            }
-            public byte[] ExchangeHash { get; set; }
-            public byte[] Key { get; set; }
-
-            /// <summary>
-            /// Gets the size of the message in bytes.
-            /// </summary>
-            /// <value>
-            /// The size of the messages in bytes.
-            /// </value>
-            protected override int BufferCapacity
-            {
-                get
-                {
-                    var capacity = base.BufferCapacity;
-                    capacity += 4; // SharedKey length
-                    capacity += _sharedKey.Length; // SharedKey
-                    capacity += ExchangeHash.Length; // ExchangeHash
-                    capacity += Key.Length; // Key
-                    return capacity;
-                }
-            }
-
-            protected override void LoadData()
-            {
-                throw new NotImplementedException();
-            }
-
-            protected override void SaveData()
-            {
-                WriteBinaryString(_sharedKey);
-                Write(ExchangeHash);
-                Write(Key);
-            }
-        }
-
-        #region IDisposable Members
-
-        /// <summary>
-        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Releases unmanaged and - optionally - managed resources
-        /// </summary>
-        /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
-        protected virtual void Dispose(bool disposing)
-        {
-        }
-
-        /// <summary>
-        /// Releases unmanaged resources and performs other cleanup operations before the
-        /// <see cref="KeyExchange"/> is reclaimed by garbage collection.
-        /// </summary>
-        ~KeyExchange()
-        {
-            Dispose(false);
-        }
-
-        #endregion
+      get
+      {
+        if (this._exchangeHash == null)
+          this._exchangeHash = this.CalculateHash();
+        return this._exchangeHash;
+      }
     }
+
+    public event EventHandler<HostKeyEventArgs> HostKeyReceived;
+
+    public virtual void Start(Session session, KeyExchangeInitMessage message)
+    {
+      this.Session = session;
+      this.SendMessage(session.ClientInitMessage);
+      string key1 = session.ConnectionInfo.Encryptions.Keys.SelectMany((Func<string, IEnumerable<string>>) (b => (IEnumerable<string>) message.EncryptionAlgorithmsClientToServer), (b, a) => new
+      {
+        b = b,
+        a = a
+      }).Where(_param1 => _param1.a == _param1.b).Select(_param1 => _param1.a).FirstOrDefault<string>();
+      session.ConnectionInfo.CurrentClientEncryption = !string.IsNullOrEmpty(key1) ? key1 : throw new SshConnectionException("Client encryption algorithm not found", DisconnectReason.KeyExchangeFailed);
+      string key2 = session.ConnectionInfo.Encryptions.Keys.SelectMany((Func<string, IEnumerable<string>>) (b => (IEnumerable<string>) message.EncryptionAlgorithmsServerToClient), (b, a) => new
+      {
+        b = b,
+        a = a
+      }).Where(_param1 => _param1.a == _param1.b).Select(_param1 => _param1.a).FirstOrDefault<string>();
+      session.ConnectionInfo.CurrentServerEncryption = !string.IsNullOrEmpty(key2) ? key2 : throw new SshConnectionException("Server decryption algorithm not found", DisconnectReason.KeyExchangeFailed);
+      string key3 = session.ConnectionInfo.HmacAlgorithms.Keys.SelectMany((Func<string, IEnumerable<string>>) (b => (IEnumerable<string>) message.MacAlgorithmsClientToServer), (b, a) => new
+      {
+        b = b,
+        a = a
+      }).Where(_param1 => _param1.a == _param1.b).Select(_param1 => _param1.a).FirstOrDefault<string>();
+      session.ConnectionInfo.CurrentClientHmacAlgorithm = !string.IsNullOrEmpty(key3) ? key3 : throw new SshConnectionException("Server HMAC algorithm not found", DisconnectReason.KeyExchangeFailed);
+      string key4 = session.ConnectionInfo.HmacAlgorithms.Keys.SelectMany((Func<string, IEnumerable<string>>) (b => (IEnumerable<string>) message.MacAlgorithmsServerToClient), (b, a) => new
+      {
+        b = b,
+        a = a
+      }).Where(_param1 => _param1.a == _param1.b).Select(_param1 => _param1.a).FirstOrDefault<string>();
+      session.ConnectionInfo.CurrentServerHmacAlgorithm = !string.IsNullOrEmpty(key4) ? key4 : throw new SshConnectionException("Server HMAC algorithm not found", DisconnectReason.KeyExchangeFailed);
+      string key5 = session.ConnectionInfo.CompressionAlgorithms.Keys.SelectMany((Func<string, IEnumerable<string>>) (b => (IEnumerable<string>) message.CompressionAlgorithmsClientToServer), (b, a) => new
+      {
+        b = b,
+        a = a
+      }).Where(_param1 => _param1.a == _param1.b).Select(_param1 => _param1.a).LastOrDefault<string>();
+      session.ConnectionInfo.CurrentClientCompressionAlgorithm = !string.IsNullOrEmpty(key5) ? key5 : throw new SshConnectionException("Compression algorithm not found", DisconnectReason.KeyExchangeFailed);
+      string key6 = session.ConnectionInfo.CompressionAlgorithms.Keys.SelectMany((Func<string, IEnumerable<string>>) (b => (IEnumerable<string>) message.CompressionAlgorithmsServerToClient), (b, a) => new
+      {
+        b = b,
+        a = a
+      }).Where(_param1 => _param1.a == _param1.b).Select(_param1 => _param1.a).LastOrDefault<string>();
+      session.ConnectionInfo.CurrentServerCompressionAlgorithm = !string.IsNullOrEmpty(key6) ? key6 : throw new SshConnectionException("Decompression algorithm not found", DisconnectReason.KeyExchangeFailed);
+      this._clientCipherInfo = session.ConnectionInfo.Encryptions[key1];
+      this._serverCipherInfo = session.ConnectionInfo.Encryptions[key2];
+      this._clientHashInfo = session.ConnectionInfo.HmacAlgorithms[key3];
+      this._serverHashInfo = session.ConnectionInfo.HmacAlgorithms[key4];
+      this._compressionType = session.ConnectionInfo.CompressionAlgorithms[key5];
+      this._decompressionType = session.ConnectionInfo.CompressionAlgorithms[key6];
+    }
+
+    public virtual void Finish()
+    {
+      if (!this.ValidateExchangeHash())
+        throw new SshConnectionException("Key exchange negotiation failed.", DisconnectReason.KeyExchangeFailed);
+      this.SendMessage((Message) new NewKeysMessage());
+    }
+
+    public Cipher CreateServerCipher()
+    {
+      byte[] sessionId = this.Session.SessionId ?? this.ExchangeHash;
+      byte[] bytes = this.Hash(KeyExchange.GenerateSessionKey(this.SharedKey, this.ExchangeHash, 'B', sessionId));
+      byte[] sessionKey = this.GenerateSessionKey(this.SharedKey, this.ExchangeHash, this.Hash(KeyExchange.GenerateSessionKey(this.SharedKey, this.ExchangeHash, 'D', sessionId)), this._serverCipherInfo.KeySize / 8);
+      DiagnosticAbstraction.Log(string.Format("[{0}] Creating server cipher (Name:{1},Key:{2},IV:{3})", (object) Session.ToHex(this.Session.SessionId), (object) this.Session.ConnectionInfo.CurrentServerEncryption, (object) Session.ToHex(sessionKey), (object) Session.ToHex(bytes)));
+      return this._serverCipherInfo.Cipher(sessionKey, bytes);
+    }
+
+    public Cipher CreateClientCipher()
+    {
+      byte[] sessionId = this.Session.SessionId ?? this.ExchangeHash;
+      byte[] numArray = this.Hash(KeyExchange.GenerateSessionKey(this.SharedKey, this.ExchangeHash, 'A', sessionId));
+      return this._clientCipherInfo.Cipher(this.GenerateSessionKey(this.SharedKey, this.ExchangeHash, this.Hash(KeyExchange.GenerateSessionKey(this.SharedKey, this.ExchangeHash, 'C', sessionId)), this._clientCipherInfo.KeySize / 8), numArray);
+    }
+
+    public HashAlgorithm CreateServerHash() => this._serverHashInfo.HashAlgorithm(this.GenerateSessionKey(this.SharedKey, this.ExchangeHash, this.Hash(KeyExchange.GenerateSessionKey(this.SharedKey, this.ExchangeHash, 'F', this.Session.SessionId ?? this.ExchangeHash)), this._serverHashInfo.KeySize / 8));
+
+    public HashAlgorithm CreateClientHash() => this._clientHashInfo.HashAlgorithm(this.GenerateSessionKey(this.SharedKey, this.ExchangeHash, this.Hash(KeyExchange.GenerateSessionKey(this.SharedKey, this.ExchangeHash, 'E', this.Session.SessionId ?? this.ExchangeHash)), this._clientHashInfo.KeySize / 8));
+
+    public Compressor CreateCompressor()
+    {
+      if (this._compressionType == (Type) null)
+        return (Compressor) null;
+      Compressor instance = this._compressionType.CreateInstance<Compressor>();
+      instance.Init(this.Session);
+      return instance;
+    }
+
+    public Compressor CreateDecompressor()
+    {
+      if (this._compressionType == (Type) null)
+        return (Compressor) null;
+      Compressor instance = this._decompressionType.CreateInstance<Compressor>();
+      instance.Init(this.Session);
+      return instance;
+    }
+
+    protected bool CanTrustHostKey(KeyHostAlgorithm host)
+    {
+      EventHandler<HostKeyEventArgs> hostKeyReceived = this.HostKeyReceived;
+      if (hostKeyReceived == null)
+        return true;
+      HostKeyEventArgs e = new HostKeyEventArgs(host);
+      hostKeyReceived((object) this, e);
+      return e.CanTrust;
+    }
+
+    protected abstract bool ValidateExchangeHash();
+
+    protected abstract byte[] CalculateHash();
+
+    protected virtual byte[] Hash(byte[] hashData)
+    {
+      using (SHA1 shA1 = CryptoAbstraction.CreateSHA1())
+        return shA1.ComputeHash(hashData, 0, hashData.Length);
+    }
+
+    protected void SendMessage(Message message) => this.Session.SendMessage(message);
+
+    private byte[] GenerateSessionKey(
+      BigInteger sharedKey,
+      byte[] exchangeHash,
+      byte[] key,
+      int size)
+    {
+      List<byte> byteList = new List<byte>((IEnumerable<byte>) key);
+      while (size > byteList.Count)
+        byteList.AddRange((IEnumerable<byte>) this.Hash(new KeyExchange._SessionKeyAdjustment()
+        {
+          SharedKey = sharedKey,
+          ExchangeHash = exchangeHash,
+          Key = key
+        }.GetBytes()));
+      return byteList.ToArray();
+    }
+
+    private static byte[] GenerateSessionKey(
+      BigInteger sharedKey,
+      byte[] exchangeHash,
+      char p,
+      byte[] sessionId)
+    {
+      return new KeyExchange._SessionKeyGeneration()
+      {
+        SharedKey = sharedKey,
+        ExchangeHash = exchangeHash,
+        Char = p,
+        SessionId = sessionId
+      }.GetBytes();
+    }
+
+    public void Dispose()
+    {
+      this.Dispose(true);
+      GC.SuppressFinalize((object) this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+    }
+
+    ~KeyExchange() => this.Dispose(false);
+
+    private class _SessionKeyGeneration : SshData
+    {
+      private byte[] _sharedKey;
+
+      public BigInteger SharedKey
+      {
+        private get => this._sharedKey.ToBigInteger();
+        set => this._sharedKey = value.ToByteArray().Reverse<byte>();
+      }
+
+      public byte[] ExchangeHash { get; set; }
+
+      public char Char { get; set; }
+
+      public byte[] SessionId { get; set; }
+
+      protected override int BufferCapacity => base.BufferCapacity + 4 + this._sharedKey.Length + this.ExchangeHash.Length + 1 + this.SessionId.Length;
+
+      protected override void LoadData() => throw new NotImplementedException();
+
+      protected override void SaveData()
+      {
+        this.WriteBinaryString(this._sharedKey);
+        this.Write(this.ExchangeHash);
+        this.Write((byte) this.Char);
+        this.Write(this.SessionId);
+      }
+    }
+
+    private class _SessionKeyAdjustment : SshData
+    {
+      private byte[] _sharedKey;
+
+      public BigInteger SharedKey
+      {
+        private get => this._sharedKey.ToBigInteger();
+        set => this._sharedKey = value.ToByteArray().Reverse<byte>();
+      }
+
+      public byte[] ExchangeHash { get; set; }
+
+      public byte[] Key { get; set; }
+
+      protected override int BufferCapacity => base.BufferCapacity + 4 + this._sharedKey.Length + this.ExchangeHash.Length + this.Key.Length;
+
+      protected override void LoadData() => throw new NotImplementedException();
+
+      protected override void SaveData()
+      {
+        this.WriteBinaryString(this._sharedKey);
+        this.Write(this.ExchangeHash);
+        this.Write(this.Key);
+      }
+    }
+  }
 }

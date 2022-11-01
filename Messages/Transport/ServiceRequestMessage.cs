@@ -1,72 +1,29 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Transport.ServiceRequestMessage
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
+using System;
 
 namespace Renci.SshNet.Messages.Transport
 {
-    /// <summary>
-    /// Represents SSH_MSG_SERVICE_REQUEST message.
-    /// </summary>
-    [Message("SSH_MSG_SERVICE_REQUEST", 5)]
-    public class ServiceRequestMessage : Message
-    {
-        private readonly byte[] _serviceName;
+  [Message("SSH_MSG_SERVICE_REQUEST", 5)]
+  public class ServiceRequestMessage : Message
+  {
+    private readonly byte[] _serviceName;
 
-        /// <summary>
-        /// Gets the name of the service.
-        /// </summary>
-        /// <value>
-        /// The name of the service.
-        /// </value>
-        public ServiceName ServiceName
-        {
-            get { return _serviceName.ToServiceName(); }
-        }
+    public ServiceName ServiceName => this._serviceName.ToServiceName();
 
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // ServiceName length
-                capacity += _serviceName.Length; // ServiceName
-                return capacity;
-            }
-        }
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this._serviceName.Length;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ServiceRequestMessage"/> class.
-        /// </summary>
-        /// <param name="serviceName">Name of the service.</param>
-        public ServiceRequestMessage(ServiceName serviceName)
-        {
-            _serviceName = serviceName.ToArray();
-        }
+    public ServiceRequestMessage(ServiceName serviceName) => this._serviceName = serviceName.ToArray();
 
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            throw new InvalidOperationException("Load data is not supported.");
-        }
+    protected override void LoadData() => throw new InvalidOperationException("Load data is not supported.");
 
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            WriteBinaryString(_serviceName);
-        }
+    protected override void SaveData() => this.WriteBinaryString(this._serviceName);
 
-        internal override void Process(Session session)
-        {
-            session.OnServiceRequestReceived(this);
-        }
-    }
+    internal override void Process(Session session) => session.OnServiceRequestReceived(this);
+  }
 }

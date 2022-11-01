@@ -1,33 +1,33 @@
-﻿using Renci.SshNet.Messages.Connection;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Channels.ServerChannel
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Messages;
+using Renci.SshNet.Messages.Connection;
 
 namespace Renci.SshNet.Channels
 {
-    internal abstract class ServerChannel : Channel
+  internal abstract class ServerChannel : Channel
+  {
+    protected ServerChannel(
+      ISession session,
+      uint localChannelNumber,
+      uint localWindowSize,
+      uint localPacketSize,
+      uint remoteChannelNumber,
+      uint remoteWindowSize,
+      uint remotePacketSize)
+      : base(session, localChannelNumber, localWindowSize, localPacketSize)
     {
-        /// <summary>
-        /// Initializes a new <see cref="ServerChannel"/> instance.
-        /// </summary>
-        /// <param name="session">The session.</param>
-        /// <param name="localChannelNumber">The local channel number.</param>
-        /// <param name="localWindowSize">Size of the window.</param>
-        /// <param name="localPacketSize">Size of the packet.</param>
-        /// <param name="remoteChannelNumber">The remote channel number.</param>
-        /// <param name="remoteWindowSize">The window size of the remote party.</param>
-        /// <param name="remotePacketSize">The maximum size of a data packet that we can send to the remote party.</param>
-        protected ServerChannel(ISession session, uint localChannelNumber, uint localWindowSize, uint localPacketSize, uint remoteChannelNumber, uint remoteWindowSize, uint remotePacketSize)
-            : base(session, localChannelNumber, localWindowSize, localPacketSize)
-        {
-            InitializeRemoteInfo(remoteChannelNumber, remoteWindowSize, remotePacketSize);
-        }
-
-        protected void SendMessage(ChannelOpenConfirmationMessage message)
-        {
-            //  No need to check whether channel is open when trying to open a channel
-            Session.SendMessage(message);
-
-            //  When we act as server, consider the channel open when we've sent the
-            // confirmation message to the peer
-            IsOpen = true;
-        }
+      this.InitializeRemoteInfo(remoteChannelNumber, remoteWindowSize, remotePacketSize);
     }
+
+    protected void SendMessage(ChannelOpenConfirmationMessage message)
+    {
+      this.Session.SendMessage((Message) message);
+      this.IsOpen = true;
+    }
+  }
 }

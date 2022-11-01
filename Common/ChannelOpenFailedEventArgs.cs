@@ -1,38 +1,29 @@
-﻿namespace Renci.SshNet.Common
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.ChannelOpenFailedEventArgs
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Common
 {
-    /// <summary>
-    /// Provides data for <see cref="Renci.SshNet.Channels.ClientChannel.OpenFailed"/> event.
-    /// </summary>
-    internal class ChannelOpenFailedEventArgs : ChannelEventArgs
+  internal class ChannelOpenFailedEventArgs : ChannelEventArgs
+  {
+    public uint ReasonCode { get; private set; }
+
+    public string Description { get; private set; }
+
+    public string Language { get; private set; }
+
+    public ChannelOpenFailedEventArgs(
+      uint channelNumber,
+      uint reasonCode,
+      string description,
+      string language)
+      : base(channelNumber)
     {
-        /// <summary>
-        /// Gets failure reason code.
-        /// </summary>
-        public uint ReasonCode { get; private set; }
-
-        /// <summary>
-        /// Gets failure description.
-        /// </summary>
-        public string Description { get; private set; }
-
-        /// <summary>
-        /// Gets failure language.
-        /// </summary>
-        public string Language { get; private set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ChannelOpenFailedEventArgs"/> class.
-        /// </summary>
-        /// <param name="channelNumber">Channel number.</param>
-        /// <param name="reasonCode">Failure reason code.</param>
-        /// <param name="description">Failure description.</param>
-        /// <param name="language">Failure language.</param>
-        public ChannelOpenFailedEventArgs(uint channelNumber, uint reasonCode, string description, string language)
-            : base(channelNumber)
-        {
-            ReasonCode = reasonCode;
-            Description = description;
-            Language = language;
-        }
+      this.ReasonCode = reasonCode;
+      this.Description = description;
+      this.Language = language;
     }
+  }
 }

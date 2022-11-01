@@ -1,44 +1,25 @@
-﻿using Renci.SshNet.Abstractions;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.KeyExchangeDiffieHellmanGroupExchangeSha256
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Abstractions;
+using System.Security.Cryptography;
 
 namespace Renci.SshNet.Security
 {
-    /// <summary>
-    /// Represents "diffie-hellman-group-exchange-sha256" algorithm implementation.
-    /// </summary>
-    internal class KeyExchangeDiffieHellmanGroupExchangeSha256 : KeyExchangeDiffieHellmanGroupExchangeShaBase
+  internal class KeyExchangeDiffieHellmanGroupExchangeSha256 : 
+    KeyExchangeDiffieHellmanGroupExchangeShaBase
+  {
+    public override string Name => "diffie-hellman-group-exchange-sha256";
+
+    protected override int HashSize => 256;
+
+    protected override byte[] Hash(byte[] hashBytes)
     {
-        /// <summary>
-        /// Gets algorithm name.
-        /// </summary>
-        public override string Name
-        {
-            get { return "diffie-hellman-group-exchange-sha256"; }
-        }
-
-        /// <summary>
-        /// Gets the size, in bits, of the computed hash code.
-        /// </summary>
-        /// <value>
-        /// The size, in bits, of the computed hash code.
-        /// </value>
-        protected override int HashSize
-        {
-            get { return 256; }
-        }
-
-        /// <summary>
-        /// Hashes the specified data bytes.
-        /// </summary>
-        /// <param name="hashBytes">Data to hash.</param>
-        /// <returns>
-        /// Hashed bytes
-        /// </returns>
-        protected override byte[] Hash(byte[] hashBytes)
-        {
-            using (var sha256 = CryptoAbstraction.CreateSHA256())
-            {
-                return sha256.ComputeHash(hashBytes);
-            }
-        }
+      using (SHA256 shA256 = CryptoAbstraction.CreateSHA256())
+        return shA256.ComputeHash(hashBytes);
     }
+  }
 }

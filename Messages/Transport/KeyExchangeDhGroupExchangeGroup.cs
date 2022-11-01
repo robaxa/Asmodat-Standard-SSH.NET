@@ -1,81 +1,38 @@
-﻿using Renci.SshNet.Common;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Messages.Transport.KeyExchangeDhGroupExchangeGroup
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Common;
 
 namespace Renci.SshNet.Messages.Transport
 {
-    /// <summary>
-    /// Represents SSH_MSG_KEX_DH_GEX_GROUP message.
-    /// </summary>
-    [Message("SSH_MSG_KEX_DH_GEX_GROUP", MessageNumber)]
-    public class KeyExchangeDhGroupExchangeGroup : Message
+  [Message("SSH_MSG_KEX_DH_GEX_GROUP", 31)]
+  public class KeyExchangeDhGroupExchangeGroup : Message
+  {
+    internal const byte MessageNumber = 31;
+    private byte[] _safePrime;
+    private byte[] _subGroup;
+
+    public BigInteger SafePrime => this._safePrime.ToBigInteger();
+
+    public BigInteger SubGroup => this._subGroup.ToBigInteger();
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this._safePrime.Length + 4 + this._subGroup.Length;
+
+    protected override void LoadData()
     {
-        internal const byte MessageNumber = 31;
-
-        private byte[] _safePrime;
-        private byte[] _subGroup;
-
-        /// <summary>
-        /// Gets or sets the safe prime.
-        /// </summary>
-        /// <value>
-        /// The safe prime.
-        /// </value>
-        public BigInteger SafePrime
-        {
-            get { return _safePrime.ToBigInteger(); }
-        }
-
-        /// <summary>
-        /// Gets or sets the generator for subgroup in GF(p).
-        /// </summary>
-        /// <value>
-        /// The sub group.
-        /// </value>
-        public BigInteger SubGroup
-        {
-            get { return _subGroup.ToBigInteger(); }
-        }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // SafePrime length
-                capacity += _safePrime.Length; // SafePrime
-                capacity += 4; // SubGroup length
-                capacity += _subGroup.Length; // SubGroup
-
-                return capacity;
-            }
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be loaded.
-        /// </summary>
-        protected override void LoadData()
-        {
-            _safePrime = ReadBinary();
-            _subGroup = ReadBinary();
-        }
-
-        /// <summary>
-        /// Called when type specific data need to be saved.
-        /// </summary>
-        protected override void SaveData()
-        {
-            WriteBinaryString(_safePrime);
-            WriteBinaryString(_subGroup);
-        }
-
-        internal override void Process(Session session)
-        {
-            session.OnKeyExchangeDhGroupExchangeGroupReceived(this);
-        }
+      this._safePrime = this.ReadBinary();
+      this._subGroup = this.ReadBinary();
     }
+
+    protected override void SaveData()
+    {
+      this.WriteBinaryString(this._safePrime);
+      this.WriteBinaryString(this._subGroup);
+    }
+
+    internal override void Process(Session session) => session.OnKeyExchangeDhGroupExchangeGroupReceived(this);
+  }
 }

@@ -1,74 +1,64 @@
-﻿using System;
-using System.Text;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Sftp.Requests.SftpRenameRequest
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Sftp.Responses;
+using System;
+using System.Text;
 
 namespace Renci.SshNet.Sftp.Requests
 {
-    internal class SftpRenameRequest : SftpRequest
+  internal class SftpRenameRequest : SftpRequest
+  {
+    private byte[] _oldPath;
+    private byte[] _newPath;
+
+    public override SftpMessageTypes SftpMessageType => SftpMessageTypes.Rename;
+
+    public string OldPath
     {
-        private byte[] _oldPath;
-        private byte[] _newPath;
-
-        public override SftpMessageTypes SftpMessageType
-        {
-            get { return SftpMessageTypes.Rename; }
-        }
-
-        public string OldPath
-        {
-            get { return Encoding.GetString(_oldPath, 0, _oldPath.Length); }
-            private set { _oldPath = Encoding.GetBytes(value); }
-        }
-
-        public string NewPath
-        {
-            get { return Encoding.GetString(_newPath, 0, _newPath.Length); }
-            private set { _newPath = Encoding.GetBytes(value); }
-        }
-
-        public Encoding Encoding { get; private set; }
-
-        /// <summary>
-        /// Gets the size of the message in bytes.
-        /// </summary>
-        /// <value>
-        /// The size of the messages in bytes.
-        /// </value>
-        protected override int BufferCapacity
-        {
-            get
-            {
-                var capacity = base.BufferCapacity;
-                capacity += 4; // OldPath length
-                capacity += _oldPath.Length; // OldPath
-                capacity += 4; // NewPath length
-                capacity += _newPath.Length; // NewPath
-                return capacity;
-            }
-        }
-
-        public SftpRenameRequest(uint protocolVersion, uint requestId, string oldPath, string newPath, Encoding encoding, Action<SftpStatusResponse> statusAction)
-            : base(protocolVersion, requestId, statusAction)
-        {
-            Encoding = encoding;
-            OldPath = oldPath;
-            NewPath = newPath;
-        }
-
-        protected override void LoadData()
-        {
-            base.LoadData();
-
-            _oldPath = ReadBinary();
-            _newPath = ReadBinary();
-        }
-
-        protected override void SaveData()
-        {
-            base.SaveData();
-
-            WriteBinaryString(_oldPath);
-            WriteBinaryString(_newPath);
-        }
+      get => this.Encoding.GetString(this._oldPath, 0, this._oldPath.Length);
+      private set => this._oldPath = this.Encoding.GetBytes(value);
     }
+
+    public string NewPath
+    {
+      get => this.Encoding.GetString(this._newPath, 0, this._newPath.Length);
+      private set => this._newPath = this.Encoding.GetBytes(value);
+    }
+
+    public Encoding Encoding { get; private set; }
+
+    protected override int BufferCapacity => base.BufferCapacity + 4 + this._oldPath.Length + 4 + this._newPath.Length;
+
+    public SftpRenameRequest(
+      uint protocolVersion,
+      uint requestId,
+      string oldPath,
+      string newPath,
+      Encoding encoding,
+      Action<SftpStatusResponse> statusAction)
+      : base(protocolVersion, requestId, statusAction)
+    {
+      this.Encoding = encoding;
+      this.OldPath = oldPath;
+      this.NewPath = newPath;
+    }
+
+    protected override void LoadData()
+    {
+      base.LoadData();
+      this._oldPath = this.ReadBinary();
+      this._newPath = this.ReadBinary();
+    }
+
+    protected override void SaveData()
+    {
+      base.SaveData();
+      this.WriteBinaryString(this._oldPath);
+      this.WriteBinaryString(this._newPath);
+    }
+  }
 }

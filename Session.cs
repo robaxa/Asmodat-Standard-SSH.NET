@@ -1,11 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Net;
-using System.Net.Sockets;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Session
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using Renci.SshNet.Abstractions;
 using Renci.SshNet.Channels;
 using Renci.SshNet.Common;
 using Renci.SshNet.Compression;
@@ -14,2644 +13,1377 @@ using Renci.SshNet.Messages.Authentication;
 using Renci.SshNet.Messages.Connection;
 using Renci.SshNet.Messages.Transport;
 using Renci.SshNet.Security;
+using Renci.SshNet.Security.Cryptography;
+using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using Renci.SshNet.Abstractions;
-using Renci.SshNet.Security.Cryptography;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace Renci.SshNet
 {
-    /// <summary>
-    /// Provides functionality to connect and interact with SSH server.
-    /// </summary>
-    public class Session : ISession
+  public class Session : ISession, IDisposable
+  {
+    private const byte Null = 0;
+    private const byte CarriageReturn = 13;
+    internal const byte LineFeed = 10;
+    internal static readonly TimeSpan InfiniteTimeSpan = new TimeSpan(0, 0, 0, 0, -1);
+    internal static readonly int Infinite = -1;
+    private const int MaximumSshPacketSize = 68536;
+    private const int InitialLocalWindowSize = 2147483647;
+    private const int LocalChannelDataPacketSize = 65536;
+    private static readonly Regex ServerVersionRe = new Regex("^SSH-(?<protoversion>[^-]+)-(?<softwareversion>.+)( SP.+)?$", RegexOptions.Compiled);
+    private static readonly SemaphoreLight AuthenticationConnection = new SemaphoreLight(3);
+    private SshMessageFactory _sshMessageFactory;
+    private EventWaitHandle _messageListenerCompleted;
+    private volatile uint _outboundPacketSequence;
+    private uint _inboundPacketSequence;
+    private EventWaitHandle _serviceAccepted = (EventWaitHandle) new AutoResetEvent(false);
+    private EventWaitHandle _exceptionWaitHandle = (EventWaitHandle) new ManualResetEvent(false);
+    private EventWaitHandle _keyExchangeCompletedWaitHandle = (EventWaitHandle) new ManualResetEvent(false);
+    private bool _keyExchangeInProgress;
+    private Exception _exception;
+    private bool _isAuthenticated;
+    private bool _isDisconnecting;
+    private IKeyExchange _keyExchange;
+    private HashAlgorithm _serverMac;
+    private HashAlgorithm _clientMac;
+    private Cipher _clientCipher;
+    private Cipher _serverCipher;
+    private Compressor _serverDecompression;
+    private Compressor _clientCompression;
+    private SemaphoreLight _sessionSemaphore;
+    private readonly IServiceFactory _serviceFactory;
+    private Socket _socket;
+    private readonly object _socketReadLock = new object();
+    private readonly object _socketWriteLock = new object();
+    private readonly object _socketDisposeLock = new object();
+    private bool _isDisconnectMessageSent;
+    private uint _nextChannelNumber;
+    private Message _clientInitMessage;
+    private bool _disposed;
+
+    public SemaphoreLight SessionSemaphore
     {
-        private const byte Null = 0x00;
-        private const byte CarriageReturn = 0x0d;
-        internal const byte LineFeed = 0x0a;
-
-        /// <summary>
-        /// Specifies an infinite waiting period.
-        /// </summary>
-        /// <remarks>
-        /// The value of this field is <c>-1</c> millisecond.
-        /// </remarks>
-        internal static readonly TimeSpan InfiniteTimeSpan = new TimeSpan(0, 0, 0, 0, -1);
-
-        /// <summary>
-        /// Specifies an infinite waiting period.
-        /// </summary>
-        /// <remarks>
-        /// The value of this field is <c>-1</c>.
-        /// </remarks>
-        internal static readonly int Infinite = -1;
-
-        /// <summary>
-        /// Specifies maximum packet size defined by the protocol.
-        /// </summary>
-        /// <value>
-        /// 68536 (64 KB + 3000 bytes).
-        /// </value>
-        private const int MaximumSshPacketSize = LocalChannelDataPacketSize + 3000;
-
-        /// <summary>
-        /// Holds the initial local window size for the channels.
-        /// </summary>
-        /// <value>
-        /// 2147483647 (2^31 - 1) bytes.
-        /// </value>
-        /// <remarks>
-        /// We currently do not define a maximum (remote) window size.
-        /// </remarks>
-        private const int InitialLocalWindowSize = 0x7FFFFFFF;
-
-        /// <summary>
-        /// Holds the maximum size of channel data packets that we receive.
-        /// </summary>
-        /// <value>
-        /// 64 KB.
-        /// </value>
-        /// <remarks>
-        /// <para>
-        /// This is the maximum size (in bytes) we support for the data (payload) of a
-        /// <c>SSH_MSG_CHANNEL_DATA</c> message we receive.
-        /// </para>
-        /// <para>
-        /// We currently do not enforce this limit.
-        /// </para>
-        /// </remarks>
-        private const int LocalChannelDataPacketSize = 1024*64;
-
-#if FEATURE_REGEX_COMPILE
-        private static readonly Regex ServerVersionRe = new Regex("^SSH-(?<protoversion>[^-]+)-(?<softwareversion>.+)( SP.+)?$", RegexOptions.Compiled);
-#else
-        private static readonly Regex ServerVersionRe = new Regex("^SSH-(?<protoversion>[^-]+)-(?<softwareversion>.+)( SP.+)?$");
-#endif
-
-        /// <summary>
-        /// Controls how many authentication attempts can take place at the same time.
-        /// </summary>
-        /// <remarks>
-        /// Some server may restrict number to prevent authentication attacks
-        /// </remarks>
-        private static readonly SemaphoreLight AuthenticationConnection = new SemaphoreLight(3);
-
-        /// <summary>
-        /// Holds metada about session messages
-        /// </summary>
-        private SshMessageFactory _sshMessageFactory;
-
-        /// <summary>
-        /// Holds a <see cref="WaitHandle"/> that is signaled when the message listener loop has completed.
-        /// </summary>
-        private EventWaitHandle _messageListenerCompleted;
-
-        /// <summary>
-        /// Specifies outbound packet number
-        /// </summary>
-        private volatile uint _outboundPacketSequence;
-
-        /// <summary>
-        /// Specifies incoming packet number
-        /// </summary>
-        private uint _inboundPacketSequence;
-
-        /// <summary>
-        /// WaitHandle to signal that last service request was accepted
-        /// </summary>
-        private EventWaitHandle _serviceAccepted = new AutoResetEvent(false);
-
-        /// <summary>
-        /// WaitHandle to signal that exception was thrown by another thread.
-        /// </summary>
-        private EventWaitHandle _exceptionWaitHandle = new ManualResetEvent(false);
-
-        /// <summary>
-        /// WaitHandle to signal that key exchange was completed.
-        /// </summary>
-        private EventWaitHandle _keyExchangeCompletedWaitHandle = new ManualResetEvent(false);
-
-        /// <summary>
-        /// WaitHandle to signal that key exchange is in progress.
-        /// </summary>
-        private bool _keyExchangeInProgress;
-
-        /// <summary>
-        /// Exception that need to be thrown by waiting thread
-        /// </summary>
-        private Exception _exception;
-
-        /// <summary>
-        /// Specifies whether connection is authenticated
-        /// </summary>
-        private bool _isAuthenticated;
-
-        /// <summary>
-        /// Specifies whether user issued Disconnect command or not
-        /// </summary>
-        private bool _isDisconnecting;
-
-        private IKeyExchange _keyExchange;
-
-        private HashAlgorithm _serverMac;
-
-        private HashAlgorithm _clientMac;
-
-        private Cipher _clientCipher;
-
-        private Cipher _serverCipher;
-
-        private Compressor _serverDecompression;
-
-        private Compressor _clientCompression;
-
-        private SemaphoreLight _sessionSemaphore;
-
-        /// <summary>
-        /// Holds the factory to use for creating new services.
-        /// </summary>
-        private readonly IServiceFactory _serviceFactory;
-
-        /// <summary>
-        /// Holds connection socket.
-        /// </summary>
-        private Socket _socket;
-
-#if FEATURE_SOCKET_POLL
-        /// <summary>
-        /// Holds an object that is used to ensure only a single thread can read from
-        /// <see cref="_socket"/> at any given time.
-        /// </summary>
-        private readonly object _socketReadLock = new object();
-#endif // FEATURE_SOCKET_POLL
-
-        /// <summary>
-        /// Holds an object that is used to ensure only a single thread can write to
-        /// <see cref="_socket"/> at any given time.
-        /// </summary>
-        /// <remarks>
-        /// This is also used to ensure that <see cref="_outboundPacketSequence"/> is
-        /// incremented atomatically.
-        /// </remarks>
-        private readonly object _socketWriteLock = new object();
-
-        /// <summary>
-        /// Holds an object that is used to ensure only a single thread can dispose
-        /// <see cref="_socket"/> at any given time.
-        /// </summary>
-        /// <remarks>
-        /// This is also used to ensure that <see cref="_socket"/> will not be disposed
-        /// while performing a given operation or set of operations on <see cref="_socket"/>.
-        /// </remarks>
-        private readonly object _socketDisposeLock = new object();
-
-        /// <summary>
-        /// Gets the session semaphore that controls session channels.
-        /// </summary>
-        /// <value>
-        /// The session semaphore.
-        /// </value>
-        public SemaphoreLight SessionSemaphore
+      get
+      {
+        if (this._sessionSemaphore == null)
         {
-            get
+          lock (this)
+          {
+            if (this._sessionSemaphore == null)
+              this._sessionSemaphore = new SemaphoreLight(this.ConnectionInfo.MaxSessions);
+          }
+        }
+        return this._sessionSemaphore;
+      }
+    }
+
+    private uint NextChannelNumber
+    {
+      get
+      {
+        uint nextChannelNumber;
+        lock (this)
+          nextChannelNumber = this._nextChannelNumber++;
+        return nextChannelNumber;
+      }
+    }
+
+    public bool IsConnected => !this._disposed && !this._isDisconnectMessageSent && this._isAuthenticated && this._messageListenerCompleted != null && !this._messageListenerCompleted.WaitOne(0) && this.IsSocketConnected();
+
+    public byte[] SessionId { get; private set; }
+
+    public Message ClientInitMessage
+    {
+      get
+      {
+        if (this._clientInitMessage == null)
+          this._clientInitMessage = (Message) new KeyExchangeInitMessage()
+          {
+            KeyExchangeAlgorithms = this.ConnectionInfo.KeyExchangeAlgorithms.Keys.ToArray<string>(),
+            ServerHostKeyAlgorithms = this.ConnectionInfo.HostKeyAlgorithms.Keys.ToArray<string>(),
+            EncryptionAlgorithmsClientToServer = this.ConnectionInfo.Encryptions.Keys.ToArray<string>(),
+            EncryptionAlgorithmsServerToClient = this.ConnectionInfo.Encryptions.Keys.ToArray<string>(),
+            MacAlgorithmsClientToServer = this.ConnectionInfo.HmacAlgorithms.Keys.ToArray<string>(),
+            MacAlgorithmsServerToClient = this.ConnectionInfo.HmacAlgorithms.Keys.ToArray<string>(),
+            CompressionAlgorithmsClientToServer = this.ConnectionInfo.CompressionAlgorithms.Keys.ToArray<string>(),
+            CompressionAlgorithmsServerToClient = this.ConnectionInfo.CompressionAlgorithms.Keys.ToArray<string>(),
+            LanguagesClientToServer = new string[1]
             {
-                if (_sessionSemaphore == null)
-                {
-                    lock (this)
-                    {
-                        if (_sessionSemaphore == null)
-                        {
-                            _sessionSemaphore = new SemaphoreLight(ConnectionInfo.MaxSessions);
-                        }
-                    }
-                }
-
-                return _sessionSemaphore;
-            }
-        }
-
-        private bool _isDisconnectMessageSent;
-
-        private uint _nextChannelNumber;
-
-        /// <summary>
-        /// Gets the next channel number.
-        /// </summary>
-        /// <value>
-        /// The next channel number.
-        /// </value>
-        private uint NextChannelNumber
-        {
-            get
+              string.Empty
+            },
+            LanguagesServerToClient = new string[1]
             {
-                uint result;
+              string.Empty
+            },
+            FirstKexPacketFollows = false,
+            Reserved = 0U
+          };
+        return this._clientInitMessage;
+      }
+    }
 
-                lock (this)
-                {
-                    result = _nextChannelNumber++;
-                }
+    public string ServerVersion { get; private set; }
 
-                return result;
-            }
-        }
+    public string ClientVersion { get; private set; }
 
-        /// <summary>
-        /// Gets a value indicating whether the session is connected.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if the session is connected; otherwise, <c>false</c>.
-        /// </value>
-        /// <remarks>
-        /// This methods returns <c>true</c> in all but the following cases:
-        /// <list type="bullet">
-        ///     <item>
-        ///         <description>The <see cref="Session"/> is disposed.</description>
-        ///     </item>
-        ///     <item>
-        ///         <description>The <c>SSH_MSG_DISCONNECT</c> message - which is used to disconnect from the server - has been sent.</description>
-        ///     </item>
-        ///     <item>
-        ///         <description>The client has not been authenticated successfully.</description>
-        ///     </item>
-        ///     <item>
-        ///         <description>The listener thread - which is used to receive messages from the server - has stopped.</description>
-        ///     </item>
-        ///     <item>
-        ///         <description>The socket used to communicate with the server is no longer connected.</description>
-        ///     </item>
-        /// </list>
-        /// </remarks>
-        public bool IsConnected
+    public ConnectionInfo ConnectionInfo { get; private set; }
+
+    public event EventHandler<ExceptionEventArgs> ErrorOccured;
+
+    public event EventHandler<EventArgs> Disconnected;
+
+    public event EventHandler<HostKeyEventArgs> HostKeyReceived;
+
+    public event EventHandler<MessageEventArgs<BannerMessage>> UserAuthenticationBannerReceived;
+
+    internal event EventHandler<MessageEventArgs<InformationRequestMessage>> UserAuthenticationInformationRequestReceived;
+
+    internal event EventHandler<MessageEventArgs<PasswordChangeRequiredMessage>> UserAuthenticationPasswordChangeRequiredReceived;
+
+    internal event EventHandler<MessageEventArgs<PublicKeyMessage>> UserAuthenticationPublicKeyReceived;
+
+    internal event EventHandler<MessageEventArgs<KeyExchangeDhGroupExchangeGroup>> KeyExchangeDhGroupExchangeGroupReceived;
+
+    internal event EventHandler<MessageEventArgs<KeyExchangeDhGroupExchangeReply>> KeyExchangeDhGroupExchangeReplyReceived;
+
+    internal event EventHandler<MessageEventArgs<DisconnectMessage>> DisconnectReceived;
+
+    internal event EventHandler<MessageEventArgs<IgnoreMessage>> IgnoreReceived;
+
+    internal event EventHandler<MessageEventArgs<UnimplementedMessage>> UnimplementedReceived;
+
+    internal event EventHandler<MessageEventArgs<DebugMessage>> DebugReceived;
+
+    internal event EventHandler<MessageEventArgs<ServiceRequestMessage>> ServiceRequestReceived;
+
+    internal event EventHandler<MessageEventArgs<ServiceAcceptMessage>> ServiceAcceptReceived;
+
+    internal event EventHandler<MessageEventArgs<KeyExchangeInitMessage>> KeyExchangeInitReceived;
+
+    internal event EventHandler<MessageEventArgs<KeyExchangeDhReplyMessage>> KeyExchangeDhReplyMessageReceived;
+
+    internal event EventHandler<MessageEventArgs<NewKeysMessage>> NewKeysReceived;
+
+    internal event EventHandler<MessageEventArgs<RequestMessage>> UserAuthenticationRequestReceived;
+
+    internal event EventHandler<MessageEventArgs<FailureMessage>> UserAuthenticationFailureReceived;
+
+    internal event EventHandler<MessageEventArgs<SuccessMessage>> UserAuthenticationSuccessReceived;
+
+    internal event EventHandler<MessageEventArgs<GlobalRequestMessage>> GlobalRequestReceived;
+
+    public event EventHandler<MessageEventArgs<RequestSuccessMessage>> RequestSuccessReceived;
+
+    public event EventHandler<MessageEventArgs<RequestFailureMessage>> RequestFailureReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelOpenMessage>> ChannelOpenReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelOpenConfirmationMessage>> ChannelOpenConfirmationReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelOpenFailureMessage>> ChannelOpenFailureReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelWindowAdjustMessage>> ChannelWindowAdjustReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelDataMessage>> ChannelDataReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelExtendedDataMessage>> ChannelExtendedDataReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelEofMessage>> ChannelEofReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelCloseMessage>> ChannelCloseReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelRequestMessage>> ChannelRequestReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelSuccessMessage>> ChannelSuccessReceived;
+
+    public event EventHandler<MessageEventArgs<ChannelFailureMessage>> ChannelFailureReceived;
+
+    internal Session(ConnectionInfo connectionInfo, IServiceFactory serviceFactory)
+    {
+      if (connectionInfo == null)
+        throw new ArgumentNullException(nameof (connectionInfo));
+      if (serviceFactory == null)
+        throw new ArgumentNullException(nameof (serviceFactory));
+      this.ClientVersion = "SSH-2.0-Renci.SshNet.SshClient.0.0.1";
+      this.ConnectionInfo = connectionInfo;
+      this._serviceFactory = serviceFactory;
+      this._messageListenerCompleted = (EventWaitHandle) new ManualResetEvent(true);
+    }
+
+    public void Connect()
+    {
+      if (this.IsConnected)
+        return;
+      try
+      {
+        Session.AuthenticationConnection.Wait();
+        if (this.IsConnected)
+          return;
+        lock (this)
         {
-            get
-            {
-                if (_disposed || _isDisconnectMessageSent || !_isAuthenticated)
-                    return false;
-                if (_messageListenerCompleted == null || _messageListenerCompleted.WaitOne(0))
-                    return false;
-
-                return IsSocketConnected();
-            }
+          if (this.IsConnected)
+            return;
+          this.Reset();
+          this._sshMessageFactory = new SshMessageFactory();
+          switch (this.ConnectionInfo.ProxyType)
+          {
+            case ProxyTypes.None:
+              this.SocketConnect(this.ConnectionInfo.Host, this.ConnectionInfo.Port);
+              break;
+            case ProxyTypes.Socks4:
+              this.SocketConnect(this.ConnectionInfo.ProxyHost, this.ConnectionInfo.ProxyPort);
+              this.ConnectSocks4();
+              break;
+            case ProxyTypes.Socks5:
+              this.SocketConnect(this.ConnectionInfo.ProxyHost, this.ConnectionInfo.ProxyPort);
+              this.ConnectSocks5();
+              break;
+            case ProxyTypes.Http:
+              this.SocketConnect(this.ConnectionInfo.ProxyHost, this.ConnectionInfo.ProxyPort);
+              this.ConnectHttp();
+              break;
+          }
+          string input;
+          Match match;
+          do
+          {
+            input = this.SocketReadLine(this.ConnectionInfo.Timeout);
+            if (input != null)
+              match = Session.ServerVersionRe.Match(input);
+            else
+              goto label_12;
+          }
+          while (!match.Success);
+          goto label_14;
+label_12:
+          throw new SshConnectionException("Server response does not contain SSH protocol identification.", DisconnectReason.ProtocolError);
+label_14:
+          this.ServerVersion = input;
+          this.ConnectionInfo.ServerVersion = this.ServerVersion;
+          this.ConnectionInfo.ClientVersion = this.ClientVersion;
+          string str1 = match.Result("${protoversion}");
+          string str2 = match.Result("${softwareversion}");
+          DiagnosticAbstraction.Log(string.Format("Server version '{0}' on '{1}'.", (object) str1, (object) str2));
+          if (!str1.Equals("2.0") && !str1.Equals("1.99"))
+            throw new SshConnectionException(string.Format((IFormatProvider) CultureInfo.CurrentCulture, "Server version '{0}' is not supported.", (object) str1), DisconnectReason.ProtocolVersionNotSupported);
+          SocketAbstraction.Send(this._socket, Encoding.UTF8.GetBytes(string.Format((IFormatProvider) CultureInfo.InvariantCulture, "{0}\r\n", (object) this.ClientVersion)));
+          this.RegisterMessage("SSH_MSG_DISCONNECT");
+          this.RegisterMessage("SSH_MSG_IGNORE");
+          this.RegisterMessage("SSH_MSG_UNIMPLEMENTED");
+          this.RegisterMessage("SSH_MSG_DEBUG");
+          this.RegisterMessage("SSH_MSG_SERVICE_ACCEPT");
+          this.RegisterMessage("SSH_MSG_KEXINIT");
+          this.RegisterMessage("SSH_MSG_NEWKEYS");
+          this.RegisterMessage("SSH_MSG_USERAUTH_BANNER");
+          this._messageListenerCompleted.Reset();
+          ThreadAbstraction.ExecuteThread(new Action(this.MessageListener));
+          this.WaitOnHandle((WaitHandle) this._keyExchangeCompletedWaitHandle);
+          if (this.SessionId == null)
+          {
+            this.Disconnect();
+          }
+          else
+          {
+            this.SendMessage((Message) new ServiceRequestMessage(ServiceName.UserAuthentication));
+            this.WaitOnHandle((WaitHandle) this._serviceAccepted);
+            if (string.IsNullOrEmpty(this.ConnectionInfo.Username))
+              throw new SshException("Username is not specified.");
+            this.RegisterMessage("SSH_MSG_GLOBAL_REQUEST");
+            this.ConnectionInfo.Authenticate((ISession) this, this._serviceFactory);
+            this._isAuthenticated = true;
+            this.RegisterMessage("SSH_MSG_REQUEST_SUCCESS");
+            this.RegisterMessage("SSH_MSG_REQUEST_FAILURE");
+            this.RegisterMessage("SSH_MSG_CHANNEL_OPEN_CONFIRMATION");
+            this.RegisterMessage("SSH_MSG_CHANNEL_OPEN_FAILURE");
+            this.RegisterMessage("SSH_MSG_CHANNEL_WINDOW_ADJUST");
+            this.RegisterMessage("SSH_MSG_CHANNEL_EXTENDED_DATA");
+            this.RegisterMessage("SSH_MSG_CHANNEL_REQUEST");
+            this.RegisterMessage("SSH_MSG_CHANNEL_SUCCESS");
+            this.RegisterMessage("SSH_MSG_CHANNEL_FAILURE");
+            this.RegisterMessage("SSH_MSG_CHANNEL_DATA");
+            this.RegisterMessage("SSH_MSG_CHANNEL_EOF");
+            this.RegisterMessage("SSH_MSG_CHANNEL_CLOSE");
+          }
         }
+      }
+      finally
+      {
+        Session.AuthenticationConnection.Release();
+      }
+    }
 
-        /// <summary>
-        /// Gets the session id.
-        /// </summary>
-        /// <value>
-        /// The session id, or <c>null</c> if the client has not been authenticated.
-        /// </value>
-        public byte[] SessionId { get; private set; }
+    public void Disconnect()
+    {
+      DiagnosticAbstraction.Log(string.Format("[{0}] Disconnecting session.", (object) Session.ToHex(this.SessionId)));
+      this.Disconnect(DisconnectReason.ByApplication, "Connection terminated by the client.");
+      if (this._messageListenerCompleted == null)
+        return;
+      this._messageListenerCompleted.WaitOne();
+    }
 
-        private Message _clientInitMessage;
+    private void Disconnect(DisconnectReason reason, string message)
+    {
+      this._isDisconnecting = true;
+      if (this.IsConnected)
+        this.TrySendDisconnect(reason, message);
+      this.SocketDisconnectAndDispose();
+    }
 
-        /// <summary>
-        /// Gets the client init message.
-        /// </summary>
-        /// <value>The client init message.</value>
-        public Message ClientInitMessage
+    void ISession.WaitOnHandle(WaitHandle waitHandle) => this.WaitOnHandle(waitHandle, this.ConnectionInfo.Timeout);
+
+    void ISession.WaitOnHandle(WaitHandle waitHandle, TimeSpan timeout) => this.WaitOnHandle(waitHandle, timeout);
+
+    internal void WaitOnHandle(WaitHandle waitHandle) => this.WaitOnHandle(waitHandle, this.ConnectionInfo.Timeout);
+
+    WaitResult ISession.TryWait(WaitHandle waitHandle, TimeSpan timeout) => this.TryWait(waitHandle, timeout, out Exception _);
+
+    WaitResult ISession.TryWait(
+      WaitHandle waitHandle,
+      TimeSpan timeout,
+      out Exception exception)
+    {
+      return this.TryWait(waitHandle, timeout, out exception);
+    }
+
+    private WaitResult TryWait(
+      WaitHandle waitHandle,
+      TimeSpan timeout,
+      out Exception exception)
+    {
+      if (waitHandle == null)
+        throw new ArgumentNullException(nameof (waitHandle));
+      switch (WaitHandle.WaitAny(new WaitHandle[3]
+      {
+        (WaitHandle) this._exceptionWaitHandle,
+        (WaitHandle) this._messageListenerCompleted,
+        waitHandle
+      }, timeout))
+      {
+        case 0:
+          if (this._exception is SshConnectionException)
+          {
+            exception = (Exception) null;
+            return WaitResult.Disconnected;
+          }
+          exception = this._exception;
+          return WaitResult.Failed;
+        case 1:
+          exception = (Exception) null;
+          return WaitResult.Disconnected;
+        case 2:
+          exception = (Exception) null;
+          return WaitResult.Success;
+        case 258:
+          exception = (Exception) null;
+          return WaitResult.TimedOut;
+        default:
+          throw new InvalidOperationException("Unexpected result.");
+      }
+    }
+
+    internal void WaitOnHandle(WaitHandle waitHandle, TimeSpan timeout)
+    {
+      if (waitHandle == null)
+        throw new ArgumentNullException(nameof (waitHandle));
+      switch (WaitHandle.WaitAny(new WaitHandle[3]
+      {
+        (WaitHandle) this._exceptionWaitHandle,
+        (WaitHandle) this._messageListenerCompleted,
+        waitHandle
+      }, timeout))
+      {
+        case 0:
+          throw this._exception;
+        case 1:
+          throw new SshConnectionException("Client not connected.");
+        case 258:
+          if (this._isDisconnecting)
+            break;
+          throw new SshOperationTimeoutException("Session operation has timed out");
+      }
+    }
+
+    internal void SendMessage(Message message)
+    {
+      if (!this._socket.CanWrite())
+        throw new SshConnectionException("Client not connected.");
+      if (this._keyExchangeInProgress && !(message is IKeyExchangedAllowed))
+        this.WaitOnHandle((WaitHandle) this._keyExchangeCompletedWaitHandle);
+      DiagnosticAbstraction.Log(string.Format("[{0}] Sending message '{1}' to server: '{2}'.", (object) Session.ToHex(this.SessionId), (object) message.GetType().Name, (object) message));
+      byte paddingMultiplier = this._clientCipher == null ? (byte) 8 : Math.Max((byte) 8, this._serverCipher.MinimumSize);
+      byte[] numArray1 = message.GetPacket(paddingMultiplier, this._clientCompression);
+      lock (this._socketWriteLock)
+      {
+        byte[] src = (byte[]) null;
+        int num1 = 4;
+        if (this._clientMac != null)
         {
-            get
-            {
-                if (_clientInitMessage == null)
-                {
-                    _clientInitMessage = new KeyExchangeInitMessage
-                        {
-                            KeyExchangeAlgorithms = ConnectionInfo.KeyExchangeAlgorithms.Keys.ToArray(),
-                            ServerHostKeyAlgorithms = ConnectionInfo.HostKeyAlgorithms.Keys.ToArray(),
-                            EncryptionAlgorithmsClientToServer = ConnectionInfo.Encryptions.Keys.ToArray(),
-                            EncryptionAlgorithmsServerToClient = ConnectionInfo.Encryptions.Keys.ToArray(),
-                            MacAlgorithmsClientToServer = ConnectionInfo.HmacAlgorithms.Keys.ToArray(),
-                            MacAlgorithmsServerToClient = ConnectionInfo.HmacAlgorithms.Keys.ToArray(),
-                            CompressionAlgorithmsClientToServer = ConnectionInfo.CompressionAlgorithms.Keys.ToArray(),
-                            CompressionAlgorithmsServerToClient = ConnectionInfo.CompressionAlgorithms.Keys.ToArray(),
-                            LanguagesClientToServer = new[] {string.Empty},
-                            LanguagesServerToClient = new[] {string.Empty},
-                            FirstKexPacketFollows = false,
-                            Reserved = 0
-                        };
-                }
-                return _clientInitMessage;
-            }
+          Pack.UInt32ToBigEndian(this._outboundPacketSequence, numArray1);
+          src = this._clientMac.ComputeHash(numArray1);
         }
-
-        /// <summary>
-        /// Gets or sets the server version string.
-        /// </summary>
-        /// <value>The server version.</value>
-        public string ServerVersion { get; private set; }
-
-        /// <summary>
-        /// Gets or sets the client version string.
-        /// </summary>
-        /// <value>The client version.</value>
-        public string ClientVersion { get; private set; }
-
-        /// <summary>
-        /// Gets or sets the connection info.
-        /// </summary>
-        /// <value>The connection info.</value>
-        public ConnectionInfo ConnectionInfo { get; private set; }
-
-        /// <summary>
-        /// Occurs when an error occurred.
-        /// </summary>
-        public event EventHandler<ExceptionEventArgs> ErrorOccured;
-
-        /// <summary>
-        /// Occurs when session has been disconnected from the server.
-        /// </summary>
-        public event EventHandler<EventArgs> Disconnected;
-
-        /// <summary>
-        /// Occurs when host key received.
-        /// </summary>
-        public event EventHandler<HostKeyEventArgs> HostKeyReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="BannerMessage"/> message is received from the server.
-        /// </summary>
-        public event EventHandler<MessageEventArgs<BannerMessage>> UserAuthenticationBannerReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="InformationRequestMessage"/> message is received from the server.
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<InformationRequestMessage>> UserAuthenticationInformationRequestReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="PasswordChangeRequiredMessage"/> message is received from the server.
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<PasswordChangeRequiredMessage>> UserAuthenticationPasswordChangeRequiredReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="PublicKeyMessage"/> message is received from the server.
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<PublicKeyMessage>> UserAuthenticationPublicKeyReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="KeyExchangeDhGroupExchangeGroup"/> message is received from the server.
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<KeyExchangeDhGroupExchangeGroup>> KeyExchangeDhGroupExchangeGroupReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="KeyExchangeDhGroupExchangeReply"/> message is received from the server.
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<KeyExchangeDhGroupExchangeReply>> KeyExchangeDhGroupExchangeReplyReceived;
-
-        #region Message events
-
-        /// <summary>
-        /// Occurs when <see cref="DisconnectMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<DisconnectMessage>> DisconnectReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="IgnoreMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<IgnoreMessage>> IgnoreReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="UnimplementedMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<UnimplementedMessage>> UnimplementedReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="DebugMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<DebugMessage>> DebugReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ServiceRequestMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<ServiceRequestMessage>> ServiceRequestReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ServiceAcceptMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<ServiceAcceptMessage>> ServiceAcceptReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="KeyExchangeInitMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<KeyExchangeInitMessage>> KeyExchangeInitReceived;
-
-        /// <summary>
-        /// Occurs when a <see cref="KeyExchangeDhReplyMessage"/> message is received from the SSH server.
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<KeyExchangeDhReplyMessage>> KeyExchangeDhReplyMessageReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="NewKeysMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<NewKeysMessage>> NewKeysReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="RequestMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<RequestMessage>> UserAuthenticationRequestReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="FailureMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<FailureMessage>> UserAuthenticationFailureReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="SuccessMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<SuccessMessage>> UserAuthenticationSuccessReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="GlobalRequestMessage"/> message received
-        /// </summary>
-        internal event EventHandler<MessageEventArgs<GlobalRequestMessage>> GlobalRequestReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="RequestSuccessMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<RequestSuccessMessage>> RequestSuccessReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="RequestFailureMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<RequestFailureMessage>> RequestFailureReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelOpenMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelOpenMessage>> ChannelOpenReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelOpenConfirmationMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelOpenConfirmationMessage>> ChannelOpenConfirmationReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelOpenFailureMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelOpenFailureMessage>> ChannelOpenFailureReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelWindowAdjustMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelWindowAdjustMessage>> ChannelWindowAdjustReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelDataMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelDataMessage>> ChannelDataReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelExtendedDataMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelExtendedDataMessage>> ChannelExtendedDataReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelEofMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelEofMessage>> ChannelEofReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelCloseMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelCloseMessage>> ChannelCloseReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelRequestMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelRequestMessage>> ChannelRequestReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelSuccessMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelSuccessMessage>> ChannelSuccessReceived;
-
-        /// <summary>
-        /// Occurs when <see cref="ChannelFailureMessage"/> message received
-        /// </summary>
-        public event EventHandler<MessageEventArgs<ChannelFailureMessage>> ChannelFailureReceived;
-
-        #endregion
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Session"/> class.
-        /// </summary>
-        /// <param name="connectionInfo">The connection info.</param>
-        /// <param name="serviceFactory">The factory to use for creating new services.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="connectionInfo"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="serviceFactory"/> is <c>null</c>.</exception>
-        internal Session(ConnectionInfo connectionInfo, IServiceFactory serviceFactory)
+        if (this._clientCipher != null)
         {
-            if (connectionInfo == null)
-                throw new ArgumentNullException("connectionInfo");
-            if (serviceFactory == null)
-                throw new ArgumentNullException("serviceFactory");
-
-            ClientVersion = "SSH-2.0-Renci.SshNet.SshClient.0.0.1";
-            ConnectionInfo = connectionInfo;
-            _serviceFactory = serviceFactory;
-            _messageListenerCompleted = new ManualResetEvent(true);
+          numArray1 = this._clientCipher.Encrypt(numArray1, num1, numArray1.Length - num1);
+          num1 = 0;
         }
-
-        /// <summary>
-        /// Connects to the server.
-        /// </summary>
-        /// <exception cref="SocketException">Socket connection to the SSH server or proxy server could not be established, or an error occurred while resolving the hostname.</exception>
-        /// <exception cref="SshConnectionException">SSH session could not be established.</exception>
-        /// <exception cref="SshAuthenticationException">Authentication of SSH session failed.</exception>
-        /// <exception cref="ProxyException">Failed to establish proxy connection.</exception>
-        public void Connect()
+        if (numArray1.Length > 68536)
+          throw new InvalidOperationException(string.Format((IFormatProvider) CultureInfo.CurrentCulture, "Packet is too big. Maximum packet size is {0} bytes.", (object) 68536));
+        int num2 = numArray1.Length - num1;
+        if (src == null)
         {
-            if (IsConnected)
-                return;
+          this.SendPacket(numArray1, num1, num2);
+        }
+        else
+        {
+          byte[] numArray2 = new byte[num2 + src.Length];
+          Buffer.BlockCopy((Array) numArray1, num1, (Array) numArray2, 0, num2);
+          Buffer.BlockCopy((Array) src, 0, (Array) numArray2, num2, src.Length);
+          this.SendPacket(numArray2, 0, numArray2.Length);
+        }
+        ++this._outboundPacketSequence;
+      }
+    }
 
+    private void SendPacket(byte[] packet, int offset, int length)
+    {
+      lock (this._socketDisposeLock)
+      {
+        if (!this._socket.IsConnected())
+          throw new SshConnectionException("Client not connected.");
+        SocketAbstraction.Send(this._socket, packet, offset, length);
+      }
+    }
+
+    private bool TrySendMessage(Message message)
+    {
+      try
+      {
+        this.SendMessage(message);
+        return true;
+      }
+      catch (SshException ex)
+      {
+        DiagnosticAbstraction.Log(string.Format("Failure sending message '{0}' to server: '{1}' => {2}", (object) message.GetType().Name, (object) message, (object) ex));
+        return false;
+      }
+      catch (SocketException ex)
+      {
+        DiagnosticAbstraction.Log(string.Format("Failure sending message '{0}' to server: '{1}' => {2}", (object) message.GetType().Name, (object) message, (object) ex));
+        return false;
+      }
+    }
+
+    private Message ReceiveMessage()
+    {
+      byte length1 = this._serverCipher == null ? (byte) 8 : Math.Max((byte) 8, this._serverCipher.MinimumSize);
+      int count = this._serverMac != null ? this._serverMac.HashSize / 8 : 0;
+      uint uint32;
+      byte[] numArray1;
+      lock (this._socketReadLock)
+      {
+        byte[] numArray2 = new byte[(int) length1];
+        if (this.TrySocketRead(numArray2, 0, (int) length1) == 0)
+          return (Message) null;
+        if (this._serverCipher != null)
+          numArray2 = this._serverCipher.Decrypt(numArray2);
+        uint32 = Pack.BigEndianToUInt32(numArray2);
+        if ((long) uint32 < (long) ((int) Math.Max((byte) 16, length1) - 4) || uint32 > 68532U)
+          throw new SshConnectionException(string.Format((IFormatProvider) CultureInfo.CurrentCulture, "Bad packet length: {0}.", (object) uint32), DisconnectReason.ProtocolError);
+        int length2 = (int) ((long) uint32 - (long) ((int) length1 - 4)) + count;
+        numArray1 = new byte[length2 + (int) length1 + 4];
+        Pack.UInt32ToBigEndian(this._inboundPacketSequence, numArray1);
+        Buffer.BlockCopy((Array) numArray2, 0, (Array) numArray1, 4, numArray2.Length);
+        if (length2 > 0)
+        {
+          if (this.TrySocketRead(numArray1, (int) length1 + 4, length2) == 0)
+            return (Message) null;
+        }
+      }
+      if (this._serverCipher != null)
+      {
+        int length3 = numArray1.Length - ((int) length1 + 4 + count);
+        if (length3 > 0)
+        {
+          byte[] src = this._serverCipher.Decrypt(numArray1, (int) length1 + 4, length3);
+          Buffer.BlockCopy((Array) src, 0, (Array) numArray1, (int) length1 + 4, src.Length);
+        }
+      }
+      byte num1 = numArray1[8];
+      int num2 = (int) uint32 - (int) num1 - 1;
+      int offset = 9;
+      if (this._serverMac != null)
+      {
+        byte[] hash = this._serverMac.ComputeHash(numArray1, 0, numArray1.Length - count);
+        if (!numArray1.Take(numArray1.Length - count, count).IsEqualTo(hash))
+          throw new SshConnectionException("MAC error", DisconnectReason.MacError);
+      }
+      if (this._serverDecompression != null)
+      {
+        numArray1 = this._serverDecompression.Decompress(numArray1, offset, num2);
+        offset = 0;
+        num2 = numArray1.Length;
+      }
+      ++this._inboundPacketSequence;
+      return this.LoadMessage(numArray1, offset, num2);
+    }
+
+    private void TrySendDisconnect(DisconnectReason reasonCode, string message)
+    {
+      this.TrySendMessage((Message) new DisconnectMessage(reasonCode, message));
+      this._isDisconnectMessageSent = true;
+    }
+
+    internal void OnDisconnectReceived(DisconnectMessage message)
+    {
+      DiagnosticAbstraction.Log(string.Format("[{0}] Disconnect received: {1} {2}.", (object) Session.ToHex(this.SessionId), (object) message.ReasonCode, (object) message.Description));
+      this._isDisconnecting = true;
+      this._exception = (Exception) new SshConnectionException(string.Format((IFormatProvider) CultureInfo.InvariantCulture, "The connection was closed by the server: {0} ({1}).", (object) message.Description, (object) message.ReasonCode), message.ReasonCode);
+      this._exceptionWaitHandle.Set();
+      EventHandler<MessageEventArgs<DisconnectMessage>> disconnectReceived = this.DisconnectReceived;
+      if (disconnectReceived != null)
+        disconnectReceived((object) this, new MessageEventArgs<DisconnectMessage>(message));
+      EventHandler<EventArgs> disconnected = this.Disconnected;
+      if (disconnected != null)
+        disconnected((object) this, new EventArgs());
+      this.SocketDisconnectAndDispose();
+    }
+
+    internal void OnIgnoreReceived(IgnoreMessage message)
+    {
+      EventHandler<MessageEventArgs<IgnoreMessage>> ignoreReceived = this.IgnoreReceived;
+      if (ignoreReceived == null)
+        return;
+      ignoreReceived((object) this, new MessageEventArgs<IgnoreMessage>(message));
+    }
+
+    internal void OnUnimplementedReceived(UnimplementedMessage message)
+    {
+      EventHandler<MessageEventArgs<UnimplementedMessage>> unimplementedReceived = this.UnimplementedReceived;
+      if (unimplementedReceived == null)
+        return;
+      unimplementedReceived((object) this, new MessageEventArgs<UnimplementedMessage>(message));
+    }
+
+    internal void OnDebugReceived(DebugMessage message)
+    {
+      EventHandler<MessageEventArgs<DebugMessage>> debugReceived = this.DebugReceived;
+      if (debugReceived == null)
+        return;
+      debugReceived((object) this, new MessageEventArgs<DebugMessage>(message));
+    }
+
+    internal void OnServiceRequestReceived(ServiceRequestMessage message)
+    {
+      EventHandler<MessageEventArgs<ServiceRequestMessage>> serviceRequestReceived = this.ServiceRequestReceived;
+      if (serviceRequestReceived == null)
+        return;
+      serviceRequestReceived((object) this, new MessageEventArgs<ServiceRequestMessage>(message));
+    }
+
+    internal void OnServiceAcceptReceived(ServiceAcceptMessage message)
+    {
+      EventHandler<MessageEventArgs<ServiceAcceptMessage>> serviceAcceptReceived = this.ServiceAcceptReceived;
+      if (serviceAcceptReceived != null)
+        serviceAcceptReceived((object) this, new MessageEventArgs<ServiceAcceptMessage>(message));
+      this._serviceAccepted.Set();
+    }
+
+    internal void OnKeyExchangeDhGroupExchangeGroupReceived(KeyExchangeDhGroupExchangeGroup message)
+    {
+      EventHandler<MessageEventArgs<KeyExchangeDhGroupExchangeGroup>> exchangeGroupReceived = this.KeyExchangeDhGroupExchangeGroupReceived;
+      if (exchangeGroupReceived == null)
+        return;
+      exchangeGroupReceived((object) this, new MessageEventArgs<KeyExchangeDhGroupExchangeGroup>(message));
+    }
+
+    internal void OnKeyExchangeDhGroupExchangeReplyReceived(KeyExchangeDhGroupExchangeReply message)
+    {
+      EventHandler<MessageEventArgs<KeyExchangeDhGroupExchangeReply>> exchangeReplyReceived = this.KeyExchangeDhGroupExchangeReplyReceived;
+      if (exchangeReplyReceived == null)
+        return;
+      exchangeReplyReceived((object) this, new MessageEventArgs<KeyExchangeDhGroupExchangeReply>(message));
+    }
+
+    internal void OnKeyExchangeInitReceived(KeyExchangeInitMessage message)
+    {
+      this._keyExchangeInProgress = true;
+      this._keyExchangeCompletedWaitHandle.Reset();
+      this._sshMessageFactory.DisableNonKeyExchangeMessages();
+      this._keyExchange = this._serviceFactory.CreateKeyExchange(this.ConnectionInfo.KeyExchangeAlgorithms, message.KeyExchangeAlgorithms);
+      this.ConnectionInfo.CurrentKeyExchangeAlgorithm = this._keyExchange.Name;
+      this._keyExchange.HostKeyReceived += new EventHandler<HostKeyEventArgs>(this.KeyExchange_HostKeyReceived);
+      this._keyExchange.Start(this, message);
+      EventHandler<MessageEventArgs<KeyExchangeInitMessage>> exchangeInitReceived = this.KeyExchangeInitReceived;
+      if (exchangeInitReceived == null)
+        return;
+      exchangeInitReceived((object) this, new MessageEventArgs<KeyExchangeInitMessage>(message));
+    }
+
+    internal void OnKeyExchangeDhReplyMessageReceived(KeyExchangeDhReplyMessage message)
+    {
+      EventHandler<MessageEventArgs<KeyExchangeDhReplyMessage>> replyMessageReceived = this.KeyExchangeDhReplyMessageReceived;
+      if (replyMessageReceived == null)
+        return;
+      replyMessageReceived((object) this, new MessageEventArgs<KeyExchangeDhReplyMessage>(message));
+    }
+
+    internal void OnNewKeysReceived(NewKeysMessage message)
+    {
+      if (this.SessionId == null)
+        this.SessionId = this._keyExchange.ExchangeHash;
+      if (this._serverMac != null)
+      {
+        this._serverMac.Dispose();
+        this._serverMac = (HashAlgorithm) null;
+      }
+      if (this._clientMac != null)
+      {
+        this._clientMac.Dispose();
+        this._clientMac = (HashAlgorithm) null;
+      }
+      this._serverCipher = this._keyExchange.CreateServerCipher();
+      this._clientCipher = this._keyExchange.CreateClientCipher();
+      this._serverMac = this._keyExchange.CreateServerHash();
+      this._clientMac = this._keyExchange.CreateClientHash();
+      this._clientCompression = this._keyExchange.CreateCompressor();
+      this._serverDecompression = this._keyExchange.CreateDecompressor();
+      if (this._keyExchange != null)
+      {
+        this._keyExchange.HostKeyReceived -= new EventHandler<HostKeyEventArgs>(this.KeyExchange_HostKeyReceived);
+        this._keyExchange.Dispose();
+        this._keyExchange = (IKeyExchange) null;
+      }
+      this._sshMessageFactory.EnableActivatedMessages();
+      EventHandler<MessageEventArgs<NewKeysMessage>> newKeysReceived = this.NewKeysReceived;
+      if (newKeysReceived != null)
+        newKeysReceived((object) this, new MessageEventArgs<NewKeysMessage>(message));
+      this._keyExchangeCompletedWaitHandle.Set();
+      this._keyExchangeInProgress = false;
+    }
+
+    void ISession.OnDisconnecting() => this._isDisconnecting = true;
+
+    internal void OnUserAuthenticationRequestReceived(RequestMessage message)
+    {
+      EventHandler<MessageEventArgs<RequestMessage>> authenticationRequestReceived = this.UserAuthenticationRequestReceived;
+      if (authenticationRequestReceived == null)
+        return;
+      authenticationRequestReceived((object) this, new MessageEventArgs<RequestMessage>(message));
+    }
+
+    internal void OnUserAuthenticationFailureReceived(FailureMessage message)
+    {
+      EventHandler<MessageEventArgs<FailureMessage>> authenticationFailureReceived = this.UserAuthenticationFailureReceived;
+      if (authenticationFailureReceived == null)
+        return;
+      authenticationFailureReceived((object) this, new MessageEventArgs<FailureMessage>(message));
+    }
+
+    internal void OnUserAuthenticationSuccessReceived(SuccessMessage message)
+    {
+      EventHandler<MessageEventArgs<SuccessMessage>> authenticationSuccessReceived = this.UserAuthenticationSuccessReceived;
+      if (authenticationSuccessReceived == null)
+        return;
+      authenticationSuccessReceived((object) this, new MessageEventArgs<SuccessMessage>(message));
+    }
+
+    internal void OnUserAuthenticationBannerReceived(BannerMessage message)
+    {
+      EventHandler<MessageEventArgs<BannerMessage>> authenticationBannerReceived = this.UserAuthenticationBannerReceived;
+      if (authenticationBannerReceived == null)
+        return;
+      authenticationBannerReceived((object) this, new MessageEventArgs<BannerMessage>(message));
+    }
+
+    internal void OnUserAuthenticationInformationRequestReceived(InformationRequestMessage message)
+    {
+      EventHandler<MessageEventArgs<InformationRequestMessage>> informationRequestReceived = this.UserAuthenticationInformationRequestReceived;
+      if (informationRequestReceived == null)
+        return;
+      informationRequestReceived((object) this, new MessageEventArgs<InformationRequestMessage>(message));
+    }
+
+    internal void OnUserAuthenticationPasswordChangeRequiredReceived(
+      PasswordChangeRequiredMessage message)
+    {
+      EventHandler<MessageEventArgs<PasswordChangeRequiredMessage>> requiredReceived = this.UserAuthenticationPasswordChangeRequiredReceived;
+      if (requiredReceived == null)
+        return;
+      requiredReceived((object) this, new MessageEventArgs<PasswordChangeRequiredMessage>(message));
+    }
+
+    internal void OnUserAuthenticationPublicKeyReceived(PublicKeyMessage message)
+    {
+      EventHandler<MessageEventArgs<PublicKeyMessage>> publicKeyReceived = this.UserAuthenticationPublicKeyReceived;
+      if (publicKeyReceived == null)
+        return;
+      publicKeyReceived((object) this, new MessageEventArgs<PublicKeyMessage>(message));
+    }
+
+    internal void OnGlobalRequestReceived(GlobalRequestMessage message)
+    {
+      EventHandler<MessageEventArgs<GlobalRequestMessage>> globalRequestReceived = this.GlobalRequestReceived;
+      if (globalRequestReceived == null)
+        return;
+      globalRequestReceived((object) this, new MessageEventArgs<GlobalRequestMessage>(message));
+    }
+
+    internal void OnRequestSuccessReceived(RequestSuccessMessage message)
+    {
+      EventHandler<MessageEventArgs<RequestSuccessMessage>> requestSuccessReceived = this.RequestSuccessReceived;
+      if (requestSuccessReceived == null)
+        return;
+      requestSuccessReceived((object) this, new MessageEventArgs<RequestSuccessMessage>(message));
+    }
+
+    internal void OnRequestFailureReceived(RequestFailureMessage message)
+    {
+      EventHandler<MessageEventArgs<RequestFailureMessage>> requestFailureReceived = this.RequestFailureReceived;
+      if (requestFailureReceived == null)
+        return;
+      requestFailureReceived((object) this, new MessageEventArgs<RequestFailureMessage>(message));
+    }
+
+    internal void OnChannelOpenReceived(ChannelOpenMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelOpenMessage>> channelOpenReceived = this.ChannelOpenReceived;
+      if (channelOpenReceived == null)
+        return;
+      channelOpenReceived((object) this, new MessageEventArgs<ChannelOpenMessage>(message));
+    }
+
+    internal void OnChannelOpenConfirmationReceived(ChannelOpenConfirmationMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelOpenConfirmationMessage>> confirmationReceived = this.ChannelOpenConfirmationReceived;
+      if (confirmationReceived == null)
+        return;
+      confirmationReceived((object) this, new MessageEventArgs<ChannelOpenConfirmationMessage>(message));
+    }
+
+    internal void OnChannelOpenFailureReceived(ChannelOpenFailureMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelOpenFailureMessage>> openFailureReceived = this.ChannelOpenFailureReceived;
+      if (openFailureReceived == null)
+        return;
+      openFailureReceived((object) this, new MessageEventArgs<ChannelOpenFailureMessage>(message));
+    }
+
+    internal void OnChannelWindowAdjustReceived(ChannelWindowAdjustMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelWindowAdjustMessage>> windowAdjustReceived = this.ChannelWindowAdjustReceived;
+      if (windowAdjustReceived == null)
+        return;
+      windowAdjustReceived((object) this, new MessageEventArgs<ChannelWindowAdjustMessage>(message));
+    }
+
+    internal void OnChannelDataReceived(ChannelDataMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelDataMessage>> channelDataReceived = this.ChannelDataReceived;
+      if (channelDataReceived == null)
+        return;
+      channelDataReceived((object) this, new MessageEventArgs<ChannelDataMessage>(message));
+    }
+
+    internal void OnChannelExtendedDataReceived(ChannelExtendedDataMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelExtendedDataMessage>> extendedDataReceived = this.ChannelExtendedDataReceived;
+      if (extendedDataReceived == null)
+        return;
+      extendedDataReceived((object) this, new MessageEventArgs<ChannelExtendedDataMessage>(message));
+    }
+
+    internal void OnChannelEofReceived(ChannelEofMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelEofMessage>> channelEofReceived = this.ChannelEofReceived;
+      if (channelEofReceived == null)
+        return;
+      channelEofReceived((object) this, new MessageEventArgs<ChannelEofMessage>(message));
+    }
+
+    internal void OnChannelCloseReceived(ChannelCloseMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelCloseMessage>> channelCloseReceived = this.ChannelCloseReceived;
+      if (channelCloseReceived == null)
+        return;
+      channelCloseReceived((object) this, new MessageEventArgs<ChannelCloseMessage>(message));
+    }
+
+    internal void OnChannelRequestReceived(ChannelRequestMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelRequestMessage>> channelRequestReceived = this.ChannelRequestReceived;
+      if (channelRequestReceived == null)
+        return;
+      channelRequestReceived((object) this, new MessageEventArgs<ChannelRequestMessage>(message));
+    }
+
+    internal void OnChannelSuccessReceived(ChannelSuccessMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelSuccessMessage>> channelSuccessReceived = this.ChannelSuccessReceived;
+      if (channelSuccessReceived == null)
+        return;
+      channelSuccessReceived((object) this, new MessageEventArgs<ChannelSuccessMessage>(message));
+    }
+
+    internal void OnChannelFailureReceived(ChannelFailureMessage message)
+    {
+      EventHandler<MessageEventArgs<ChannelFailureMessage>> channelFailureReceived = this.ChannelFailureReceived;
+      if (channelFailureReceived == null)
+        return;
+      channelFailureReceived((object) this, new MessageEventArgs<ChannelFailureMessage>(message));
+    }
+
+    private void KeyExchange_HostKeyReceived(object sender, HostKeyEventArgs e)
+    {
+      EventHandler<HostKeyEventArgs> hostKeyReceived = this.HostKeyReceived;
+      if (hostKeyReceived == null)
+        return;
+      hostKeyReceived((object) this, e);
+    }
+
+    public void RegisterMessage(string messageName) => this._sshMessageFactory.EnableAndActivateMessage(messageName);
+
+    public void UnRegisterMessage(string messageName) => this._sshMessageFactory.DisableAndDeactivateMessage(messageName);
+
+    private Message LoadMessage(byte[] data, int offset, int count)
+    {
+      Message message = this._sshMessageFactory.Create(data[offset]);
+      message.Load(data, offset + 1, count - 1);
+      DiagnosticAbstraction.Log(string.Format("[{0}] Received message '{1}' from server: '{2}'.", (object) Session.ToHex(this.SessionId), (object) message.GetType().Name, (object) message));
+      return message;
+    }
+
+    private static string ToHex(byte[] bytes, int offset)
+    {
+      int num1 = bytes.Length - offset;
+      StringBuilder stringBuilder = new StringBuilder(bytes.Length * 2);
+      for (int index = offset; index < num1; ++index)
+      {
+        byte num2 = bytes[index];
+        stringBuilder.Append(num2.ToString("X2"));
+      }
+      return stringBuilder.ToString();
+    }
+
+    internal static string ToHex(byte[] bytes) => bytes == null ? (string) null : Session.ToHex(bytes, 0);
+
+    private void SocketConnect(string host, int port)
+    {
+      IPEndPoint remoteEndpoint = new IPEndPoint(DnsAbstraction.GetHostAddresses(host)[0], port);
+      DiagnosticAbstraction.Log(string.Format("Initiating connection to '{0}:{1}'.", (object) host, (object) port));
+      this._socket = SocketAbstraction.Connect(remoteEndpoint, this.ConnectionInfo.Timeout);
+      this._socket.SendBufferSize = 137072;
+      this._socket.ReceiveBufferSize = 137072;
+    }
+
+    private int SocketRead(byte[] buffer, int offset, int length)
+    {
+      int num = SocketAbstraction.Read(this._socket, buffer, offset, length, Session.InfiniteTimeSpan);
+      return num != 0 ? num : throw new SshConnectionException("An established connection was aborted by the server.", DisconnectReason.ConnectionLost);
+    }
+
+    private bool IsSocketConnected()
+    {
+      lock (this._socketDisposeLock)
+      {
+        if (!this._socket.IsConnected())
+          return false;
+        lock (this._socketReadLock)
+          return !this._socket.Poll(0, SelectMode.SelectRead) || this._socket.Available != 0;
+      }
+    }
+
+    private int TrySocketRead(byte[] buffer, int offset, int length) => SocketAbstraction.Read(this._socket, buffer, offset, length, Session.InfiniteTimeSpan);
+
+    private string SocketReadLine(TimeSpan timeout)
+    {
+      Encoding ascii = SshData.Ascii;
+      List<byte> byteList = new List<byte>();
+      byte[] buffer = new byte[1];
+      while (SocketAbstraction.Read(this._socket, buffer, 0, buffer.Length, timeout) != 0)
+      {
+        byteList.Add(buffer[0]);
+        if (byteList.Count > 0 && (byteList[byteList.Count - 1] == (byte) 10 || byteList[byteList.Count - 1] <= (byte) 0))
+          break;
+      }
+      if (byteList.Count == 0)
+        return (string) null;
+      if (byteList.Count == 1 && byteList[byteList.Count - 1] == (byte) 0)
+        return string.Empty;
+      if (byteList.Count > 1 && byteList[byteList.Count - 2] == (byte) 13)
+        return ascii.GetString(byteList.ToArray(), 0, byteList.Count - 2);
+      return byteList.Count > 1 && byteList[byteList.Count - 1] == (byte) 10 ? ascii.GetString(byteList.ToArray(), 0, byteList.Count - 1) : ascii.GetString(byteList.ToArray(), 0, byteList.Count);
+    }
+
+    private void SocketDisconnectAndDispose()
+    {
+      if (this._socket == null)
+        return;
+      lock (this._socketDisposeLock)
+      {
+        if (this._socket != null)
+        {
+          if (this._socket.Connected)
+          {
             try
             {
-                AuthenticationConnection.Wait();
-
-                if (IsConnected)
-                    return;
-
-                lock (this)
-                {
-                    //  If connected don't connect again
-                    if (IsConnected)
-                        return;
-
-                    // reset connection specific information
-                    Reset();
-
-                    //  Build list of available messages while connecting
-                    _sshMessageFactory = new SshMessageFactory();
-
-                    switch (ConnectionInfo.ProxyType)
-                    {
-                        case ProxyTypes.None:
-                            SocketConnect(ConnectionInfo.Host, ConnectionInfo.Port);
-                            break;
-                        case ProxyTypes.Socks4:
-                            SocketConnect(ConnectionInfo.ProxyHost, ConnectionInfo.ProxyPort);
-                            ConnectSocks4();
-                            break;
-                        case ProxyTypes.Socks5:
-                            SocketConnect(ConnectionInfo.ProxyHost, ConnectionInfo.ProxyPort);
-                            ConnectSocks5();
-                            break;
-                        case ProxyTypes.Http:
-                            SocketConnect(ConnectionInfo.ProxyHost, ConnectionInfo.ProxyPort);
-                            ConnectHttp();
-                            break;
-                    }
-
-                    Match versionMatch;
-
-                    //  Get server version from the server,
-                    //  ignore text lines which are sent before if any
-                    while (true)
-                    {
-                        var serverVersion = SocketReadLine(ConnectionInfo.Timeout);
-                        if (serverVersion == null)
-                            throw new SshConnectionException("Server response does not contain SSH protocol identification.", DisconnectReason.ProtocolError);
-                        versionMatch = ServerVersionRe.Match(serverVersion);
-                        if (versionMatch.Success)
-                        {
-                            ServerVersion = serverVersion;
-                            break;
-                        }
-                    }
-
-                    //  Set connection versions
-                    ConnectionInfo.ServerVersion = ServerVersion;
-                    ConnectionInfo.ClientVersion = ClientVersion;
-
-                    //  Get server SSH version
-                    var version = versionMatch.Result("${protoversion}");
-
-                    var softwareName = versionMatch.Result("${softwareversion}");
-
-                    DiagnosticAbstraction.Log(string.Format("Server version '{0}' on '{1}'.", version, softwareName));
-
-                    if (!(version.Equals("2.0") || version.Equals("1.99")))
-                    {
-                        throw new SshConnectionException(string.Format(CultureInfo.CurrentCulture, "Server version '{0}' is not supported.", version), DisconnectReason.ProtocolVersionNotSupported);
-                    }
-
-                    SocketAbstraction.Send(_socket, Encoding.UTF8.GetBytes(string.Format(CultureInfo.InvariantCulture, "{0}\x0D\x0A", ClientVersion)));
-
-                    //  Register Transport response messages
-                    RegisterMessage("SSH_MSG_DISCONNECT");
-                    RegisterMessage("SSH_MSG_IGNORE");
-                    RegisterMessage("SSH_MSG_UNIMPLEMENTED");
-                    RegisterMessage("SSH_MSG_DEBUG");
-                    RegisterMessage("SSH_MSG_SERVICE_ACCEPT");
-                    RegisterMessage("SSH_MSG_KEXINIT");
-                    RegisterMessage("SSH_MSG_NEWKEYS");
-
-                    //  Some server implementations might sent this message first, prior establishing encryption algorithm
-                    RegisterMessage("SSH_MSG_USERAUTH_BANNER");
-
-                    // mark the message listener threads as started
-                    _messageListenerCompleted.Reset();
-
-                    //  Start incoming request listener
-                    ThreadAbstraction.ExecuteThread(MessageListener);
-
-                    //  Wait for key exchange to be completed
-                    WaitOnHandle(_keyExchangeCompletedWaitHandle);
-
-                    //  If sessionId is not set then its not connected
-                    if (SessionId == null)
-                    {
-                        Disconnect();
-                        return;
-                    }
-
-                    //  Request user authorization service
-                    SendMessage(new ServiceRequestMessage(ServiceName.UserAuthentication));
-
-                    //  Wait for service to be accepted
-                    WaitOnHandle(_serviceAccepted);
-
-                    if (string.IsNullOrEmpty(ConnectionInfo.Username))
-                    {
-                        throw new SshException("Username is not specified.");
-                    }
-
-                    // Some servers send a global request immediately after successful authentication
-                    // Avoid race condition by already enabling SSH_MSG_GLOBAL_REQUEST before authentication
-                    RegisterMessage("SSH_MSG_GLOBAL_REQUEST");
-
-                    ConnectionInfo.Authenticate(this, _serviceFactory);
-                    _isAuthenticated = true;
-
-                    //  Register Connection messages
-                    RegisterMessage("SSH_MSG_REQUEST_SUCCESS");
-                    RegisterMessage("SSH_MSG_REQUEST_FAILURE");
-                    RegisterMessage("SSH_MSG_CHANNEL_OPEN_CONFIRMATION");
-                    RegisterMessage("SSH_MSG_CHANNEL_OPEN_FAILURE");
-                    RegisterMessage("SSH_MSG_CHANNEL_WINDOW_ADJUST");
-                    RegisterMessage("SSH_MSG_CHANNEL_EXTENDED_DATA");
-                    RegisterMessage("SSH_MSG_CHANNEL_REQUEST");
-                    RegisterMessage("SSH_MSG_CHANNEL_SUCCESS");
-                    RegisterMessage("SSH_MSG_CHANNEL_FAILURE");
-                    RegisterMessage("SSH_MSG_CHANNEL_DATA");
-                    RegisterMessage("SSH_MSG_CHANNEL_EOF");
-                    RegisterMessage("SSH_MSG_CHANNEL_CLOSE");
-                }
-            }
-            finally
-            {
-                AuthenticationConnection.Release();
-            }
-        }
-
-        /// <summary>
-        /// Disconnects from the server.
-        /// </summary>
-        /// <remarks>
-        /// This sends a <b>SSH_MSG_DISCONNECT</b> message to the server, waits for the
-        /// server to close the socket on its end and subsequently closes the client socket.
-        /// </remarks>
-        public void Disconnect()
-        {
-            DiagnosticAbstraction.Log(string.Format("[{0}] Disconnecting session.", ToHex(SessionId)));
-
-            // send SSH_MSG_DISCONNECT message, clear socket read buffer and dispose it
-            Disconnect(DisconnectReason.ByApplication, "Connection terminated by the client.");
-
-            // at this point, we are sure that the listener thread will stop as we've
-            // disconnected the socket, so lets wait until the message listener thread
-            // has completed
-            if (_messageListenerCompleted != null)
-            {
-                _messageListenerCompleted.WaitOne();
-            }
-        }
-
-        private void Disconnect(DisconnectReason reason, string message)
-        {
-            // transition to disconnecting state to avoid throwing exceptions while cleaning up, and to
-            // ensure any exceptions that are raised do not overwrite the exception that is set
-            _isDisconnecting = true;
-
-            // send disconnect message to the server if the connection is still open
-            // and the disconnect message has not yet been sent
-            //
-            // note that this should also cause the listener loop to be interrupted as
-            // the server should respond by closing the socket
-            if (IsConnected)
-            {
-                TrySendDisconnect(reason, message);
-            }
-
-            // disconnect socket, and dispose it
-            SocketDisconnectAndDispose();
-        }
-
-        /// <summary>
-        /// Waits for the specified handle or the exception handle for the receive thread
-        /// to signal within the connection timeout.
-        /// </summary>
-        /// <param name="waitHandle">The wait handle.</param>
-        /// <exception cref="SshConnectionException">A received package was invalid or failed the message integrity check.</exception>
-        /// <exception cref="SshOperationTimeoutException">None of the handles are signaled in time and the session is not disconnecting.</exception>
-        /// <exception cref="SocketException">A socket error was signaled while receiving messages from the server.</exception>
-        /// <remarks>
-        /// When neither handles are signaled in time and the session is not closing, then the
-        /// session is disconnected.
-        /// </remarks>
-        void ISession.WaitOnHandle(WaitHandle waitHandle)
-        {
-            WaitOnHandle(waitHandle, ConnectionInfo.Timeout);
-        }
-
-        /// <summary>
-        /// Waits for the specified handle or the exception handle for the receive thread
-        /// to signal within the specified timeout.
-        /// </summary>
-        /// <param name="waitHandle">The wait handle.</param>
-        /// <param name="timeout">The time to wait for any of the handles to become signaled.</param>
-        /// <exception cref="SshConnectionException">A received package was invalid or failed the message integrity check.</exception>
-        /// <exception cref="SshOperationTimeoutException">None of the handles are signaled in time and the session is not disconnecting.</exception>
-        /// <exception cref="SocketException">A socket error was signaled while receiving messages from the server.</exception>
-        /// <remarks>
-        /// When neither handles are signaled in time and the session is not closing, then the
-        /// session is disconnected.
-        /// </remarks>
-        void ISession.WaitOnHandle(WaitHandle waitHandle, TimeSpan timeout)
-        {
-            WaitOnHandle(waitHandle, timeout);
-        }
-
-        /// <summary>
-        /// Waits for the specified handle or the exception handle for the receive thread
-        /// to signal within the connection timeout.
-        /// </summary>
-        /// <param name="waitHandle">The wait handle.</param>
-        /// <exception cref="SshConnectionException">A received package was invalid or failed the message integrity check.</exception>
-        /// <exception cref="SshOperationTimeoutException">None of the handles are signaled in time and the session is not disconnecting.</exception>
-        /// <exception cref="SocketException">A socket error was signaled while receiving messages from the server.</exception>
-        /// <remarks>
-        /// When neither handles are signaled in time and the session is not closing, then the
-        /// session is disconnected.
-        /// </remarks>
-        internal void WaitOnHandle(WaitHandle waitHandle)
-        {
-            WaitOnHandle(waitHandle, ConnectionInfo.Timeout);
-        }
-
-        /// <summary>
-        /// Waits for the specified <seec ref="WaitHandle"/> to receive a signal, using a <see cref="TimeSpan"/>
-        /// to specify the time interval.
-        /// </summary>
-        /// <param name="waitHandle">The <see cref="WaitHandle"/> that should be signaled.</param>
-        /// <param name="timeout">A <see cref="TimeSpan"/> that represents the number of milliseconds to wait, or a <see cref="TimeSpan"/> that represents <c>-1</c> milliseconds to wait indefinitely.</param>
-        /// <returns>
-        /// A <see cref="WaitResult"/>.
-        /// </returns>
-        WaitResult ISession.TryWait(WaitHandle waitHandle, TimeSpan timeout)
-        {
-            Exception exception;
-            return TryWait(waitHandle, timeout, out exception);
-        }
-
-        /// <summary>
-        /// Waits for the specified <seec ref="WaitHandle"/> to receive a signal, using a <see cref="TimeSpan"/>
-        /// to specify the time interval.
-        /// </summary>
-        /// <param name="waitHandle">The <see cref="WaitHandle"/> that should be signaled.</param>
-        /// <param name="timeout">A <see cref="TimeSpan"/> that represents the number of milliseconds to wait, or a <see cref="TimeSpan"/> that represents <c>-1</c> milliseconds to wait indefinitely.</param>
-        /// <param name="exception">When this method returns <see cref="WaitResult.Failed"/>, contains the <see cref="Exception"/>.</param>
-        /// <returns>
-        /// A <see cref="WaitResult"/>.
-        /// </returns>
-        WaitResult ISession.TryWait(WaitHandle waitHandle, TimeSpan timeout, out Exception exception)
-        {
-            return TryWait(waitHandle, timeout, out exception);
-        }
-
-        /// <summary>
-        /// Waits for the specified <seec ref="WaitHandle"/> to receive a signal, using a <see cref="TimeSpan"/>
-        /// to specify the time interval.
-        /// </summary>
-        /// <param name="waitHandle">The <see cref="WaitHandle"/> that should be signaled.</param>
-        /// <param name="timeout">A <see cref="TimeSpan"/> that represents the number of milliseconds to wait, or a <see cref="TimeSpan"/> that represents <c>-1</c> milliseconds to wait indefinitely.</param>
-        /// <param name="exception">When this method returns <see cref="WaitResult.Failed"/>, contains the <see cref="Exception"/>.</param>
-        /// <returns>
-        /// A <see cref="WaitResult"/>.
-        /// </returns>
-        private WaitResult TryWait(WaitHandle waitHandle, TimeSpan timeout, out Exception exception)
-        {
-            if (waitHandle == null)
-                throw new ArgumentNullException("waitHandle");
-
-            var waitHandles = new[]
-                {
-                    _exceptionWaitHandle,
-                    _messageListenerCompleted,
-                    waitHandle
-                };
-
-            switch (WaitHandle.WaitAny(waitHandles, timeout))
-            {
-                case 0:
-                    if (_exception is SshConnectionException)
-                    {
-                        exception = null;
-                        return WaitResult.Disconnected;
-                    }
-                    exception = _exception;
-                    return WaitResult.Failed;
-                case 1:
-                    exception = null;
-                    return WaitResult.Disconnected;
-                case 2:
-                    exception = null;
-                    return WaitResult.Success;
-                case WaitHandle.WaitTimeout:
-                    exception = null;
-                    return WaitResult.TimedOut;
-                default:
-                    throw new InvalidOperationException("Unexpected result.");
-            }
-        }
-
-        /// <summary>
-        /// Waits for the specified handle or the exception handle for the receive thread
-        /// to signal within the specified timeout.
-        /// </summary>
-        /// <param name="waitHandle">The wait handle.</param>
-        /// <param name="timeout">The time to wait for any of the handles to become signaled.</param>
-        /// <exception cref="SshConnectionException">A received package was invalid or failed the message integrity check.</exception>
-        /// <exception cref="SshOperationTimeoutException">None of the handles are signaled in time and the session is not disconnecting.</exception>
-        /// <exception cref="SocketException">A socket error was signaled while receiving messages from the server.</exception>
-        internal void WaitOnHandle(WaitHandle waitHandle, TimeSpan timeout)
-        {
-            if (waitHandle == null)
-                throw new ArgumentNullException("waitHandle");
-
-            var waitHandles = new[]
-                {
-                    _exceptionWaitHandle,
-                    _messageListenerCompleted,
-                    waitHandle
-                };
-
-            switch (WaitHandle.WaitAny(waitHandles, timeout))
-            {
-                case 0:
-                    throw _exception;
-                case 1:
-                    throw new SshConnectionException("Client not connected.");
-                case WaitHandle.WaitTimeout:
-                    // when the session is disconnecting, a timeout is likely when no
-                    // network connectivity is available; depending on the configured
-                    // timeout either the WaitAny times out first or a SocketException
-                    // detailing a timeout thrown hereby completing the listener thread
-                    // (which makes us end up in case 1). Either way, we do not want to
-                    // report an exception to the client when we're disconnecting anyway
-                    if (!_isDisconnecting)
-                    {
-                        throw new SshOperationTimeoutException("Session operation has timed out");
-                    }
-                    break;
-            }
-        }
-
-        /// <summary>
-        /// Sends a message to the server.
-        /// </summary>
-        /// <param name="message">The message to send.</param>
-        /// <exception cref="SshConnectionException">The client is not connected.</exception>
-        /// <exception cref="SshOperationTimeoutException">The operation timed out.</exception>
-        /// <exception cref="InvalidOperationException">The size of the packet exceeds the maximum size defined by the protocol.</exception>
-        internal void SendMessage(Message message)
-        {
-            if (!_socket.CanWrite())
-                throw new SshConnectionException("Client not connected.");
-
-            if (_keyExchangeInProgress && !(message is IKeyExchangedAllowed))
-            {
-                //  Wait for key exchange to be completed
-                WaitOnHandle(_keyExchangeCompletedWaitHandle);
-            }
-
-            DiagnosticAbstraction.Log(string.Format("[{0}] Sending message '{1}' to server: '{2}'.", ToHex(SessionId), message.GetType().Name, message));
-
-            var paddingMultiplier = _clientCipher == null ? (byte) 8 : Math.Max((byte) 8, _serverCipher.MinimumSize);
-            var packetData = message.GetPacket(paddingMultiplier, _clientCompression);
-
-            // take a write lock to ensure the outbound packet sequence number is incremented
-            // atomically, and only after the packet has actually been sent
-            lock (_socketWriteLock)
-            {
-                byte[] hash = null;
-                var packetDataOffset = 4; // first four bytes are reserved for outbound packet sequence
-
-                if (_clientMac != null)
-                {
-                    // write outbound packet sequence to start of packet data
-                    Pack.UInt32ToBigEndian(_outboundPacketSequence, packetData);
-                    //  calculate packet hash
-                    hash = _clientMac.ComputeHash(packetData);
-                }
-
-                // Encrypt packet data
-                if (_clientCipher != null)
-                {
-                    packetData = _clientCipher.Encrypt(packetData, packetDataOffset, (packetData.Length - packetDataOffset));
-                    packetDataOffset = 0;
-                }
-
-                if (packetData.Length > MaximumSshPacketSize)
-                {
-                    throw new InvalidOperationException(string.Format(CultureInfo.CurrentCulture, "Packet is too big. Maximum packet size is {0} bytes.", MaximumSshPacketSize));
-                }
-
-                var packetLength = packetData.Length - packetDataOffset;
-                if (hash == null)
-                {
-                    SendPacket(packetData, packetDataOffset, packetLength);
-                }
-                else
-                {
-                    var data = new byte[packetLength + hash.Length];
-                    Buffer.BlockCopy(packetData, packetDataOffset, data, 0, packetLength);
-                    Buffer.BlockCopy(hash, 0, data, packetLength, hash.Length);
-                    SendPacket(data, 0, data.Length);
-                }
-
-                // increment the packet sequence number only after we're sure the packet has
-                // been sent; even though it's only used for the MAC, it needs to be incremented
-                // for each package sent.
-                // 
-                // the server will use it to verify the data integrity, and as such the order in
-                // which messages are sent must follow the outbound packet sequence number
-                _outboundPacketSequence++;
-            }
-        }
-
-        /// <summary>
-        /// Sends an SSH packet to the server.
-        /// </summary>
-        /// <param name="packet">A byte array containing the packet to send.</param>
-        /// <param name="offset">The offset of the packet.</param>
-        /// <param name="length">The length of the packet.</param>
-        /// <exception cref="SshConnectionException">Client is not connected to the server.</exception>
-        /// <remarks>
-        /// <para>
-        /// The send is performed in a dispose lock to avoid <see cref="NullReferenceException"/>
-        /// and/or <see cref="ObjectDisposedException"/> when sending the packet.
-        /// </para>
-        /// <para>
-        /// This method is only to be used when the connection is established, as the locking
-        /// overhead is not required while establising the connection.
-        /// </para>
-        /// </remarks>
-        private void SendPacket(byte[] packet, int offset, int length)
-        {
-            lock (_socketDisposeLock)
-            {
-                if (!_socket.IsConnected())
-                    throw new SshConnectionException("Client not connected.");
-
-                SocketAbstraction.Send(_socket, packet, offset, length);
-            }
-        }
-
-        /// <summary>
-        /// Sends a message to the server.
-        /// </summary>
-        /// <param name="message">The message to send.</param>
-        /// <returns>
-        /// <c>true</c> if the message was sent to the server; otherwise, <c>false</c>.
-        /// </returns>
-        /// <exception cref="InvalidOperationException">The size of the packet exceeds the maximum size defined by the protocol.</exception>
-        /// <remarks>
-        /// This methods returns <c>false</c> when the attempt to send the message results in a
-        /// <see cref="SocketException"/> or a <see cref="SshException"/>.
-        /// </remarks>
-        private bool TrySendMessage(Message message)
-        {
-            try
-            {
-                SendMessage(message);
-                return true;
-            }
-            catch (SshException ex)
-            {
-                DiagnosticAbstraction.Log(string.Format("Failure sending message '{0}' to server: '{1}' => {2}", message.GetType().Name, message, ex));
-                return false;
+              DiagnosticAbstraction.Log(string.Format("[{0}] Shutting down socket.", (object) Session.ToHex(this.SessionId)));
+              this._socket.Shutdown(SocketShutdown.Send);
             }
             catch (SocketException ex)
             {
-                DiagnosticAbstraction.Log(string.Format("Failure sending message '{0}' to server: '{1}' => {2}", message.GetType().Name, message, ex));
-                return false;
+              DiagnosticAbstraction.Log("Failure shutting down socket: " + ex?.ToString());
             }
+          }
+          DiagnosticAbstraction.Log(string.Format("[{0}] Disposing socket.", (object) Session.ToHex(this.SessionId)));
+          this._socket.Dispose();
+          DiagnosticAbstraction.Log(string.Format("[{0}] Disposed socket.", (object) Session.ToHex(this.SessionId)));
+          this._socket = (Socket) null;
         }
+      }
+    }
 
-        /// <summary>
-        /// Receives the message from the server.
-        /// </summary>
-        /// <returns>
-        /// The incoming SSH message, or <c>null</c> if the connection with the SSH server was closed.
-        /// </returns>
-        /// <remarks>
-        /// We need no locking here since all messages are read by a single thread.
-        /// </remarks>
-        private Message ReceiveMessage()
+    private void MessageListener()
+    {
+      List<Socket> checkRead = new List<Socket>()
+      {
+        this._socket
+      };
+      try
+      {
+        while (this._socket.IsConnected())
         {
-            // the length of the packet sequence field in bytes
-            const int inboundPacketSequenceLength = 4;
-            // The length of the "packet length" field in bytes
-            const int packetLengthFieldLength = 4;
-            // The length of the "padding length" field in bytes
-            const int paddingLengthFieldLength = 1;
-
-            // Determine the size of the first block, which is 8 or cipher block size (whichever is larger) bytes
-            var blockSize = _serverCipher == null ? (byte) 8 : Math.Max((byte) 8, _serverCipher.MinimumSize);
-
-            var serverMacLength = _serverMac != null ? _serverMac.HashSize/8 : 0;
-
-            byte[] data;
-            uint packetLength;
-
-#if FEATURE_SOCKET_POLL
-            // avoid reading from socket while IsSocketConnected is attempting to determine whether the
-            // socket is still connected by invoking Socket.Poll(...) and subsequently verifying value of
-            // Socket.Available
-            lock (_socketReadLock)
-            {
-#endif // FEATURE_SOCKET_POLL
-                //  Read first block - which starts with the packet length
-                var firstBlock = new byte[blockSize];
-                if (TrySocketRead(firstBlock, 0, blockSize) == 0)
-                {
-                    // connection with SSH server was closed
-                    return null;
-                }
-
-                if (_serverCipher != null)
-                {
-                    firstBlock = _serverCipher.Decrypt(firstBlock);
-                }
-
-                packetLength = Pack.BigEndianToUInt32(firstBlock);
-
-                // Test packet minimum and maximum boundaries
-                if (packetLength < Math.Max((byte) 16, blockSize) - 4 || packetLength > MaximumSshPacketSize - 4)
-                    throw new SshConnectionException(
-                        string.Format(CultureInfo.CurrentCulture, "Bad packet length: {0}.", packetLength),
-                        DisconnectReason.ProtocolError);
-
-                // Determine the number of bytes left to read; We've already read "blockSize" bytes, but the
-                // "packet length" field itself - which is 4 bytes - is not included in the length of the packet
-                var bytesToRead = (int) (packetLength - (blockSize - packetLengthFieldLength)) + serverMacLength;
-
-                // Construct buffer for holding the payload and the inbound packet sequence as we need both in order
-                // to generate the hash.
-                // 
-                // The total length of the "data" buffer is an addition of:
-                // - inboundPacketSequenceLength (4 bytes)
-                // - packetLength
-                // - serverMacLength
-                // 
-                // We include the inbound packet sequence to allow us to have the the full SSH packet in a single
-                // byte[] for the purpose of calculating the client hash. Room for the server MAC is foreseen
-                // to read the packet including server MAC in a single pass (except for the initial block).
-                data = new byte[bytesToRead + blockSize + inboundPacketSequenceLength];
-                Pack.UInt32ToBigEndian(_inboundPacketSequence, data);
-                Buffer.BlockCopy(firstBlock, 0, data, inboundPacketSequenceLength, firstBlock.Length);
-
-                if (bytesToRead > 0)
-                {
-                    if (TrySocketRead(data, blockSize + inboundPacketSequenceLength, bytesToRead) == 0)
-                    {
-                        return null;
-                    }
-                }
-#if FEATURE_SOCKET_POLL
-            }
-#endif // FEATURE_SOCKET_POLL
-
-            if (_serverCipher != null)
-            {
-                var numberOfBytesToDecrypt = data.Length - (blockSize + inboundPacketSequenceLength + serverMacLength);
-                if (numberOfBytesToDecrypt > 0)
-                {
-                    var decryptedData = _serverCipher.Decrypt(data, blockSize + inboundPacketSequenceLength, numberOfBytesToDecrypt);
-                    Buffer.BlockCopy(decryptedData, 0, data, blockSize + inboundPacketSequenceLength, decryptedData.Length);
-                }
-            }
-
-            var paddingLength = data[inboundPacketSequenceLength + packetLengthFieldLength];
-            var messagePayloadLength = (int) packetLength - paddingLength - paddingLengthFieldLength;
-            var messagePayloadOffset = inboundPacketSequenceLength + packetLengthFieldLength + paddingLengthFieldLength;
-
-            // validate message against MAC
-            if (_serverMac != null)
-            {
-                var clientHash = _serverMac.ComputeHash(data, 0, data.Length - serverMacLength);
-                var serverHash = data.Take(data.Length - serverMacLength, serverMacLength);
-
-                // TODO add IsEqualTo overload that takes left+right index and number of bytes to compare;
-                // TODO that way we can eliminate the extra allocation of the Take above
-                if (!serverHash.IsEqualTo(clientHash))
-                {
-                    throw new SshConnectionException("MAC error", DisconnectReason.MacError);
-                }
-            }
-
-            if (_serverDecompression != null)
-            {
-                data = _serverDecompression.Decompress(data, messagePayloadOffset, messagePayloadLength);
-
-                // data now only contains the decompressed payload, and as such the offset is reset to zero
-                messagePayloadOffset = 0;
-                // the length of the payload is now the complete decompressed content
-                messagePayloadLength = data.Length;
-            }
-
-            _inboundPacketSequence++;
-
-            return LoadMessage(data, messagePayloadOffset, messagePayloadLength);
+          Socket.Select((IList) checkRead, (IList) null, (IList) null, -1);
+          if (this._socket.IsConnected())
+          {
+            Message message = this.ReceiveMessage();
+            if (message != null)
+              message.Process(this);
+            else
+              break;
+          }
+          else
+            break;
         }
+        this.RaiseError((Exception) Session.CreateConnectionAbortedByServerException());
+      }
+      catch (SocketException ex)
+      {
+        this.RaiseError((Exception) new SshConnectionException(ex.Message, DisconnectReason.ConnectionLost, (Exception) ex));
+      }
+      catch (Exception ex)
+      {
+        this.RaiseError(ex);
+      }
+      finally
+      {
+        this._messageListenerCompleted.Set();
+      }
+    }
 
-        private void TrySendDisconnect(DisconnectReason reasonCode, string message)
+    private byte SocketReadByte()
+    {
+      byte[] buffer = new byte[1];
+      this.SocketRead(buffer, 0, 1);
+      return buffer[0];
+    }
+
+    private void ConnectSocks4()
+    {
+      SocketAbstraction.Send(this._socket, Session.CreateSocks4ConnectionRequest(this.ConnectionInfo.Host, (ushort) this.ConnectionInfo.Port, this.ConnectionInfo.ProxyUsername));
+      if (this.SocketReadByte() > (byte) 0)
+        throw new ProxyException("SOCKS4: Null is expected.");
+      switch (this.SocketReadByte())
+      {
+        case 90:
+          this.SocketRead(new byte[6], 0, 6);
+          break;
+        case 91:
+          throw new ProxyException("SOCKS4: Connection rejected.");
+        case 92:
+          throw new ProxyException("SOCKS4: Client is not running identd or not reachable from the server.");
+        case 93:
+          throw new ProxyException("SOCKS4: Client's identd could not confirm the user ID string in the request.");
+        default:
+          throw new ProxyException("SOCKS4: Not valid response.");
+      }
+    }
+
+    private void ConnectSocks5()
+    {
+      SocketAbstraction.Send(this._socket, new byte[4]
+      {
+        (byte) 5,
+        (byte) 2,
+        (byte) 0,
+        (byte) 2
+      });
+      byte num1 = this.SocketReadByte();
+      if (num1 != (byte) 5)
+        throw new ProxyException(string.Format("SOCKS Version '{0}' is not supported.", (object) num1));
+      switch (this.SocketReadByte())
+      {
+        case 2:
+          SocketAbstraction.Send(this._socket, Session.CreateSocks5UserNameAndPasswordAuthenticationRequest(this.ConnectionInfo.ProxyUsername, this.ConnectionInfo.ProxyPassword));
+          byte[] numArray = SocketAbstraction.Read(this._socket, 2, this.ConnectionInfo.Timeout);
+          if (numArray[0] != (byte) 1)
+            throw new ProxyException("SOCKS5: Server authentication version is not valid.");
+          if (numArray[1] > (byte) 0)
+            throw new ProxyException("SOCKS5: Username/Password authentication failed.");
+          break;
+        case byte.MaxValue:
+          throw new ProxyException("SOCKS5: No acceptable authentication methods were offered.");
+      }
+      SocketAbstraction.Send(this._socket, Session.CreateSocks5ConnectionRequest(this.ConnectionInfo.Host, (ushort) this.ConnectionInfo.Port));
+      if (this.SocketReadByte() != (byte) 5)
+        throw new ProxyException("SOCKS5: Version 5 is expected.");
+      switch (this.SocketReadByte())
+      {
+        case 0:
+          if (this.SocketReadByte() > (byte) 0)
+            throw new ProxyException("SOCKS5: 0 byte is expected.");
+          byte num2 = this.SocketReadByte();
+          switch (num2)
+          {
+            case 1:
+              this.SocketRead(new byte[4], 0, 4);
+              break;
+            case 4:
+              this.SocketRead(new byte[16], 0, 16);
+              break;
+            default:
+              throw new ProxyException(string.Format("Address type '{0}' is not supported.", (object) num2));
+          }
+          this.SocketRead(new byte[2], 0, 2);
+          break;
+        case 1:
+          throw new ProxyException("SOCKS5: General failure.");
+        case 2:
+          throw new ProxyException("SOCKS5: Connection not allowed by ruleset.");
+        case 3:
+          throw new ProxyException("SOCKS5: Network unreachable.");
+        case 4:
+          throw new ProxyException("SOCKS5: Host unreachable.");
+        case 5:
+          throw new ProxyException("SOCKS5: Connection refused by destination host.");
+        case 6:
+          throw new ProxyException("SOCKS5: TTL expired.");
+        case 7:
+          throw new ProxyException("SOCKS5: Command not supported or protocol error.");
+        case 8:
+          throw new ProxyException("SOCKS5: Address type not supported.");
+        default:
+          throw new ProxyException("SOCKS5: Not valid response.");
+      }
+    }
+
+    private static byte[] CreateSocks5UserNameAndPasswordAuthenticationRequest(
+      string username,
+      string password)
+    {
+      if (username.Length > (int) byte.MaxValue)
+        throw new ProxyException("Proxy username is too long.");
+      if (password.Length > (int) byte.MaxValue)
+        throw new ProxyException("Proxy password is too long.");
+      byte[] bytes = new byte[2 + username.Length + 1 + password.Length];
+      int num1 = 0;
+      byte[] numArray1 = bytes;
+      int index1 = num1;
+      int num2 = index1 + 1;
+      numArray1[index1] = (byte) 1;
+      byte[] numArray2 = bytes;
+      int index2 = num2;
+      int byteIndex1 = index2 + 1;
+      int length1 = (int) (byte) username.Length;
+      numArray2[index2] = (byte) length1;
+      SshData.Ascii.GetBytes(username, 0, username.Length, bytes, byteIndex1);
+      int num3 = byteIndex1 + username.Length;
+      byte[] numArray3 = bytes;
+      int index3 = num3;
+      int byteIndex2 = index3 + 1;
+      int length2 = (int) (byte) password.Length;
+      numArray3[index3] = (byte) length2;
+      SshData.Ascii.GetBytes(password, 0, password.Length, bytes, byteIndex2);
+      return bytes;
+    }
+
+    private static byte[] CreateSocks4ConnectionRequest(
+      string hostname,
+      ushort port,
+      string username)
+    {
+      byte[] destinationAddress = Session.GetSocks4DestinationAddress(hostname);
+      byte[] connectionRequest = new byte[4 + destinationAddress.Length + username.Length + 1];
+      int num1 = 0;
+      byte[] numArray1 = connectionRequest;
+      int index1 = num1;
+      int num2 = index1 + 1;
+      numArray1[index1] = (byte) 4;
+      byte[] numArray2 = connectionRequest;
+      int index2 = num2;
+      int offset = index2 + 1;
+      numArray2[index2] = (byte) 1;
+      Pack.UInt16ToBigEndian(port, connectionRequest, offset);
+      int dstOffset = offset + 2;
+      Buffer.BlockCopy((Array) destinationAddress, 0, (Array) connectionRequest, dstOffset, destinationAddress.Length);
+      int index3 = dstOffset + destinationAddress.Length;
+      connectionRequest[index3] = (byte) 0;
+      return connectionRequest;
+    }
+
+    private static byte[] CreateSocks5ConnectionRequest(string hostname, ushort port)
+    {
+      byte addressType;
+      byte[] destinationAddress = Session.GetSocks5DestinationAddress(hostname, out addressType);
+      byte[] connectionRequest = new byte[4 + destinationAddress.Length + 2];
+      int num1 = 0;
+      byte[] numArray1 = connectionRequest;
+      int index1 = num1;
+      int num2 = index1 + 1;
+      numArray1[index1] = (byte) 5;
+      byte[] numArray2 = connectionRequest;
+      int index2 = num2;
+      int num3 = index2 + 1;
+      numArray2[index2] = (byte) 1;
+      byte[] numArray3 = connectionRequest;
+      int index3 = num3;
+      int num4 = index3 + 1;
+      numArray3[index3] = (byte) 0;
+      byte[] numArray4 = connectionRequest;
+      int index4 = num4;
+      int dstOffset = index4 + 1;
+      int num5 = (int) addressType;
+      numArray4[index4] = (byte) num5;
+      Buffer.BlockCopy((Array) destinationAddress, 0, (Array) connectionRequest, dstOffset, destinationAddress.Length);
+      int offset = dstOffset + destinationAddress.Length;
+      Pack.UInt16ToBigEndian(port, connectionRequest, offset);
+      return connectionRequest;
+    }
+
+    private static byte[] GetSocks4DestinationAddress(string hostname)
+    {
+      foreach (IPAddress hostAddress in DnsAbstraction.GetHostAddresses(hostname))
+      {
+        if (hostAddress.AddressFamily == AddressFamily.InterNetwork)
+          return hostAddress.GetAddressBytes();
+      }
+      throw new ProxyException(string.Format("SOCKS4 only supports IPv4. No such address found for '{0}'.", (object) hostname));
+    }
+
+    private static byte[] GetSocks5DestinationAddress(string hostname, out byte addressType)
+    {
+      IPAddress hostAddress = DnsAbstraction.GetHostAddresses(hostname)[0];
+      byte[] addressBytes;
+      switch (hostAddress.AddressFamily)
+      {
+        case AddressFamily.InterNetwork:
+          addressType = (byte) 1;
+          addressBytes = hostAddress.GetAddressBytes();
+          break;
+        case AddressFamily.InterNetworkV6:
+          addressType = (byte) 4;
+          addressBytes = hostAddress.GetAddressBytes();
+          break;
+        default:
+          throw new ProxyException(string.Format("SOCKS5: IP address '{0}' is not supported.", (object) hostAddress));
+      }
+      return addressBytes;
+    }
+
+    private void ConnectHttp()
+    {
+      Regex regex1 = new Regex("HTTP/(?<version>\\d[.]\\d) (?<statusCode>\\d{3}) (?<reasonPhrase>.+)$");
+      Regex regex2 = new Regex("(?<fieldName>[^\\[\\]()<>@,;:\\\"/?={} \\t]+):(?<fieldValue>.+)?");
+      SocketAbstraction.Send(this._socket, SshData.Ascii.GetBytes(string.Format("CONNECT {0}:{1} HTTP/1.0\r\n", (object) this.ConnectionInfo.Host, (object) this.ConnectionInfo.Port)));
+      if (!string.IsNullOrEmpty(this.ConnectionInfo.ProxyUsername))
+      {
+        string s = string.Format("Proxy-Authorization: Basic {0}\r\n", (object) Convert.ToBase64String(SshData.Ascii.GetBytes(string.Format("{0}:{1}", (object) this.ConnectionInfo.ProxyUsername, (object) this.ConnectionInfo.ProxyPassword))));
+        SocketAbstraction.Send(this._socket, SshData.Ascii.GetBytes(s));
+      }
+      SocketAbstraction.Send(this._socket, SshData.Ascii.GetBytes("\r\n"));
+      HttpStatusCode? nullable1 = new HttpStatusCode?();
+      int length = 0;
+      Match match1;
+      string s1;
+      while (true)
+      {
+        HttpStatusCode? nullable2;
+        HttpStatusCode httpStatusCode;
+        Match match2;
+        do
         {
-            var disconnectMessage = new DisconnectMessage(reasonCode, message);
-
-            // send the disconnect message, but ignore the outcome
-            TrySendMessage(disconnectMessage);
-
-            // mark disconnect message sent regardless of whether the send sctually succeeded
-            _isDisconnectMessageSent = true;
-        }
-
-        #region Handle received message events
-
-        /// <summary>
-        /// Called when <see cref="DisconnectMessage"/> received.
-        /// </summary>
-        /// <param name="message"><see cref="DisconnectMessage"/> message.</param>
-        internal void OnDisconnectReceived(DisconnectMessage message)
-        {
-            DiagnosticAbstraction.Log(string.Format("[{0}] Disconnect received: {1} {2}.", ToHex(SessionId), message.ReasonCode, message.Description));
-
-            // transition to disconnecting state to avoid throwing exceptions while cleaning up, and to
-            // ensure any exceptions that are raised do not overwrite the SshConnectionException that we
-            // set below
-            _isDisconnecting = true;
-
-            _exception = new SshConnectionException(string.Format(CultureInfo.InvariantCulture, "The connection was closed by the server: {0} ({1}).", message.Description, message.ReasonCode), message.ReasonCode);
-            _exceptionWaitHandle.Set();
-
-            var disconnectReceived = DisconnectReceived;
-            if (disconnectReceived != null)
-                disconnectReceived(this, new MessageEventArgs<DisconnectMessage>(message));
-
-            var disconnected = Disconnected;
-            if (disconnected != null)
-                disconnected(this, new EventArgs());
-
-            // disconnect socket, and dispose it
-            SocketDisconnectAndDispose();
-        }
-
-        /// <summary>
-        /// Called when <see cref="IgnoreMessage"/> received.
-        /// </summary>
-        /// <param name="message"><see cref="IgnoreMessage"/> message.</param>
-        internal void OnIgnoreReceived(IgnoreMessage message)
-        {
-            var handlers = IgnoreReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<IgnoreMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="UnimplementedMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="UnimplementedMessage"/> message.</param>
-        internal void OnUnimplementedReceived(UnimplementedMessage message)
-        {
-            var handlers = UnimplementedReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<UnimplementedMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="DebugMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="DebugMessage"/> message.</param>
-        internal void OnDebugReceived(DebugMessage message)
-        {
-            var handlers = DebugReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<DebugMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ServiceRequestMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ServiceRequestMessage"/> message.</param>
-        internal void OnServiceRequestReceived(ServiceRequestMessage message)
-        {
-            var handlers = ServiceRequestReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ServiceRequestMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ServiceAcceptMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ServiceAcceptMessage"/> message.</param>
-        internal void OnServiceAcceptReceived(ServiceAcceptMessage message)
-        {
-            var handlers = ServiceAcceptReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ServiceAcceptMessage>(message));
-
-            _serviceAccepted.Set();
-        }
-
-        internal void OnKeyExchangeDhGroupExchangeGroupReceived(KeyExchangeDhGroupExchangeGroup message)
-        {
-            var handlers = KeyExchangeDhGroupExchangeGroupReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<KeyExchangeDhGroupExchangeGroup>(message));
-        }
-
-        internal void OnKeyExchangeDhGroupExchangeReplyReceived(KeyExchangeDhGroupExchangeReply message)
-        {
-            var handlers = KeyExchangeDhGroupExchangeReplyReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<KeyExchangeDhGroupExchangeReply>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="KeyExchangeInitMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="KeyExchangeInitMessage"/> message.</param>
-        internal void OnKeyExchangeInitReceived(KeyExchangeInitMessage message)
-        {
-            _keyExchangeInProgress = true;
-
-            _keyExchangeCompletedWaitHandle.Reset();
-
-            // Disable messages that are not key exchange related
-            _sshMessageFactory.DisableNonKeyExchangeMessages();
-
-            _keyExchange = _serviceFactory.CreateKeyExchange(ConnectionInfo.KeyExchangeAlgorithms,
-                                                             message.KeyExchangeAlgorithms);
-
-            ConnectionInfo.CurrentKeyExchangeAlgorithm = _keyExchange.Name;
-
-            _keyExchange.HostKeyReceived += KeyExchange_HostKeyReceived;
-
-            //  Start the algorithm implementation
-            _keyExchange.Start(this, message);
-
-            var keyExchangeInitReceived = KeyExchangeInitReceived;
-            if (keyExchangeInitReceived != null)
-                keyExchangeInitReceived(this, new MessageEventArgs<KeyExchangeInitMessage>(message));
-        }
-
-        internal void OnKeyExchangeDhReplyMessageReceived(KeyExchangeDhReplyMessage message)
-        {
-            var handlers = KeyExchangeDhReplyMessageReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<KeyExchangeDhReplyMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="NewKeysMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="NewKeysMessage"/> message.</param>
-        internal void OnNewKeysReceived(NewKeysMessage message)
-        {
-            //  Update sessionId
-            if (SessionId == null)
-            {
-                SessionId = _keyExchange.ExchangeHash;
-            }
-
-            //  Dispose of old ciphers and hash algorithms
-            if (_serverMac != null)
-            {
-                _serverMac.Dispose();
-                _serverMac = null;
-            }
-
-            if (_clientMac != null)
-            {
-                _clientMac.Dispose();
-                _clientMac = null;
-            }
-
-            //  Update negotiated algorithms
-            _serverCipher = _keyExchange.CreateServerCipher();
-            _clientCipher = _keyExchange.CreateClientCipher();
-            _serverMac = _keyExchange.CreateServerHash();
-            _clientMac = _keyExchange.CreateClientHash();
-            _clientCompression = _keyExchange.CreateCompressor();
-            _serverDecompression = _keyExchange.CreateDecompressor();
-
-            //  Dispose of old KeyExchange object as it is no longer needed.
-            if (_keyExchange != null)
-            {
-                _keyExchange.HostKeyReceived -= KeyExchange_HostKeyReceived;
-                _keyExchange.Dispose();
-                _keyExchange = null;
-            }
-
-            // Enable activated messages that are not key exchange related
-            _sshMessageFactory.EnableActivatedMessages();
-
-            var newKeysReceived = NewKeysReceived;
-            if (newKeysReceived != null)
-                newKeysReceived(this, new MessageEventArgs<NewKeysMessage>(message));
-
-            //  Signal that key exchange completed
-            _keyExchangeCompletedWaitHandle.Set();
-
-            _keyExchangeInProgress = false;
-        }
-
-        /// <summary>
-        /// Called when client is disconnecting from the server.
-        /// </summary>
-        void ISession.OnDisconnecting()
-        {
-            _isDisconnecting = true;
-        }
-
-        /// <summary>
-        /// Called when <see cref="RequestMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="RequestMessage"/> message.</param>
-        internal void OnUserAuthenticationRequestReceived(RequestMessage message)
-        {
-            var handlers = UserAuthenticationRequestReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<RequestMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="FailureMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="FailureMessage"/> message.</param>
-        internal void OnUserAuthenticationFailureReceived(FailureMessage message)
-        {
-            var handlers = UserAuthenticationFailureReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<FailureMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="SuccessMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="SuccessMessage"/> message.</param>
-        internal void OnUserAuthenticationSuccessReceived(SuccessMessage message)
-        {
-            var handlers = UserAuthenticationSuccessReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<SuccessMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="BannerMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="BannerMessage"/> message.</param>
-        internal void OnUserAuthenticationBannerReceived(BannerMessage message)
-        {
-            var handlers = UserAuthenticationBannerReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<BannerMessage>(message));
-        }
-
-
-        /// <summary>
-        /// Called when <see cref="InformationRequestMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="InformationRequestMessage"/> message.</param>
-        internal void OnUserAuthenticationInformationRequestReceived(InformationRequestMessage message)
-        {
-            var handlers = UserAuthenticationInformationRequestReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<InformationRequestMessage>(message));
-        }
-
-        internal void OnUserAuthenticationPasswordChangeRequiredReceived(PasswordChangeRequiredMessage message)
-        {
-            var handlers = UserAuthenticationPasswordChangeRequiredReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<PasswordChangeRequiredMessage>(message));
-        }
-
-        internal void OnUserAuthenticationPublicKeyReceived(PublicKeyMessage message)
-        {
-            var handlers = UserAuthenticationPublicKeyReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<PublicKeyMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="GlobalRequestMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="GlobalRequestMessage"/> message.</param>
-        internal void OnGlobalRequestReceived(GlobalRequestMessage message)
-        {
-            var handlers = GlobalRequestReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<GlobalRequestMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="RequestSuccessMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="RequestSuccessMessage"/> message.</param>
-        internal void OnRequestSuccessReceived(RequestSuccessMessage message)
-        {
-            var handlers = RequestSuccessReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<RequestSuccessMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="RequestFailureMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="RequestFailureMessage"/> message.</param>
-        internal void OnRequestFailureReceived(RequestFailureMessage message)
-        {
-            var handlers = RequestFailureReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<RequestFailureMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelOpenMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelOpenMessage"/> message.</param>
-        internal void OnChannelOpenReceived(ChannelOpenMessage message)
-        {
-            var handlers = ChannelOpenReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelOpenMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelOpenConfirmationMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelOpenConfirmationMessage"/> message.</param>
-        internal void OnChannelOpenConfirmationReceived(ChannelOpenConfirmationMessage message)
-        {
-            var handlers = ChannelOpenConfirmationReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelOpenConfirmationMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelOpenFailureMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelOpenFailureMessage"/> message.</param>
-        internal void OnChannelOpenFailureReceived(ChannelOpenFailureMessage message)
-        {
-            var handlers = ChannelOpenFailureReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelOpenFailureMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelWindowAdjustMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelWindowAdjustMessage"/> message.</param>
-        internal void OnChannelWindowAdjustReceived(ChannelWindowAdjustMessage message)
-        {
-            var handlers = ChannelWindowAdjustReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelWindowAdjustMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelDataMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelDataMessage"/> message.</param>
-        internal void OnChannelDataReceived(ChannelDataMessage message)
-        {
-            var handlers = ChannelDataReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelDataMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelExtendedDataMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelExtendedDataMessage"/> message.</param>
-        internal void OnChannelExtendedDataReceived(ChannelExtendedDataMessage message)
-        {
-            var handlers = ChannelExtendedDataReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelExtendedDataMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelCloseMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelCloseMessage"/> message.</param>
-        internal void OnChannelEofReceived(ChannelEofMessage message)
-        {
-            var handlers = ChannelEofReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelEofMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelCloseMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelCloseMessage"/> message.</param>
-        internal void OnChannelCloseReceived(ChannelCloseMessage message)
-        {
-            var handlers = ChannelCloseReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelCloseMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelRequestMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelRequestMessage"/> message.</param>
-        internal void OnChannelRequestReceived(ChannelRequestMessage message)
-        {
-            var handlers = ChannelRequestReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelRequestMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelSuccessMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelSuccessMessage"/> message.</param>
-        internal void OnChannelSuccessReceived(ChannelSuccessMessage message)
-        {
-            var handlers = ChannelSuccessReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelSuccessMessage>(message));
-        }
-
-        /// <summary>
-        /// Called when <see cref="ChannelFailureMessage"/> message received.
-        /// </summary>
-        /// <param name="message"><see cref="ChannelFailureMessage"/> message.</param>
-        internal void OnChannelFailureReceived(ChannelFailureMessage message)
-        {
-            var handlers = ChannelFailureReceived;
-            if (handlers != null)
-                handlers(this, new MessageEventArgs<ChannelFailureMessage>(message));
-        }
-
-        #endregion
-
-        private void KeyExchange_HostKeyReceived(object sender, HostKeyEventArgs e)
-        {
-            var handlers = HostKeyReceived;
-            if (handlers != null)
-                handlers(this, e);
-        }
-
-        #region Message loading functions
-
-        /// <summary>
-        /// Registers SSH message with the session.
-        /// </summary>
-        /// <param name="messageName">The name of the message to register with the session.</param>
-        public void RegisterMessage(string messageName)
-        {
-            _sshMessageFactory.EnableAndActivateMessage(messageName);
-        }
-
-        /// <summary>
-        /// Unregister SSH message from the session.
-        /// </summary>
-        /// <param name="messageName">The name of the message to unregister with the session.</param>
-        public void UnRegisterMessage(string messageName)
-        {
-            _sshMessageFactory.DisableAndDeactivateMessage(messageName);
-        }
-
-        /// <summary>
-        /// Loads a message from a given buffer.
-        /// </summary>
-        /// <param name="data">An array of bytes from which to construct the message.</param>
-        /// <param name="offset">The zero-based byte offset in <paramref name="data"/> at which to begin reading.</param>
-        /// <param name="count">The number of bytes to load.</param>
-        /// <returns>
-        /// A message constructed from <paramref name="data"/>.
-        /// </returns>
-        /// <exception cref="SshException">The type of the message is not supported.</exception>
-        private Message LoadMessage(byte[] data, int offset, int count)
-        {
-            var messageType = data[offset];
-
-            var message = _sshMessageFactory.Create(messageType);
-            message.Load(data, offset + 1, count - 1);
-
-            DiagnosticAbstraction.Log(string.Format("[{0}] Received message '{1}' from server: '{2}'.", ToHex(SessionId), message.GetType().Name, message));
-
-            return message;
-        }
-
-        private static string ToHex(byte[] bytes, int offset)
-        {
-            var byteCount = bytes.Length - offset;
-
-            var builder = new StringBuilder(bytes.Length * 2);
-
-            for (var i = offset; i < byteCount; i++)
-            {
-                var b = bytes[i];
-                builder.Append(b.ToString("X2"));
-            }
-
-            return builder.ToString();
-        }
-
-        internal static string ToHex(byte[] bytes)
-        {
-            if (bytes == null)
-                return null;
-
-            return ToHex(bytes, 0);
-        }
-
-        #endregion
-
-        /// <summary>
-        /// Establishes a socket connection to the specified host and port.
-        /// </summary>
-        /// <param name="host">The host name of the server to connect to.</param>
-        /// <param name="port">The port to connect to.</param>
-        /// <exception cref="SshOperationTimeoutException">The connection failed to establish within the configured <see cref="Renci.SshNet.ConnectionInfo.Timeout"/>.</exception>
-        /// <exception cref="SocketException">An error occurred trying to establish the connection.</exception>
-        private void SocketConnect(string host, int port)
-        {
-            var ipAddress = DnsAbstraction.GetHostAddresses(host)[0];
-            var ep = new IPEndPoint(ipAddress, port);
-
-            DiagnosticAbstraction.Log(string.Format("Initiating connection to '{0}:{1}'.", host, port));
-
-            _socket = SocketAbstraction.Connect(ep, ConnectionInfo.Timeout);
-
-            const int socketBufferSize = 2 * MaximumSshPacketSize;
-            _socket.SendBufferSize = socketBufferSize;
-            _socket.ReceiveBufferSize = socketBufferSize;
-        }
-
-        /// <summary>
-        /// Performs a blocking read on the socket until <paramref name="length"/> bytes are received.
-        /// </summary>
-        /// <param name="buffer">An array of type <see cref="byte"/> that is the storage location for the received data.</param>
-        /// <param name="offset">The position in <paramref name="buffer"/> parameter to store the received data.</param>
-        /// <param name="length">The number of bytes to read.</param>
-        /// <returns>
-        /// The number of bytes read.
-        /// </returns>
-        /// <exception cref="SshConnectionException">The socket is closed.</exception>
-        /// <exception cref="SshOperationTimeoutException">The read has timed-out.</exception>
-        /// <exception cref="SocketException">The read failed.</exception>
-        private int SocketRead(byte[] buffer, int offset, int length)
-        {
-            var bytesRead = SocketAbstraction.Read(_socket, buffer, offset, length, InfiniteTimeSpan);
-            if (bytesRead == 0)
-            {
-                // when we're in the disconnecting state (either triggered by client or server), then the
-                // SshConnectionException will interrupt the message listener loop (if not already interrupted)
-                // and the exception itself will be ignored (in RaiseError)
-                throw new SshConnectionException("An established connection was aborted by the server.",
-                                                 DisconnectReason.ConnectionLost);
-            }
-            return bytesRead;
-        }
-
-#if FEATURE_SOCKET_POLL
-        /// <summary>
-        /// Gets a value indicating whether the socket is connected.
-        /// </summary>
-        /// <returns>
-        /// <c>true</c> if the socket is connected; otherwise, <c>false</c>.
-        /// </returns>
-        /// <remarks>
-        /// <para>
-        /// As a first check we verify whether <see cref="Socket.Connected"/> is
-        /// <c>true</c>. However, this only returns the state of the socket as of
-        /// the last I/O operation.
-        /// </para>
-        /// <para>
-        /// Therefore we use the combination of <see cref="Socket.Poll(int, SelectMode)"/> with mode <see cref="SelectMode.SelectRead"/>
-        /// and <see cref="Socket.Available"/> to verify if the socket is still connected.
-        /// </para>
-        /// <para>
-        /// The MSDN doc mention the following on the return value of <see cref="Socket.Poll(int, SelectMode)"/>
-        /// with mode <see cref="SelectMode.SelectRead"/>:
-        /// <list type="bullet">
-        ///     <item>
-        ///         <description><c>true</c> if data is available for reading;</description>
-        ///     </item>
-        ///     <item>
-        ///         <description><c>true</c> if the connection has been closed, reset, or terminated; otherwise, returns <c>false</c>.</description>
-        ///     </item>
-        /// </list>
-        /// </para>
-        /// <para>
-        /// <c>Conclusion:</c> when the return value is <c>true</c> - but no data is available for reading - then
-        /// the socket is no longer connected.
-        /// </para>
-        /// <para>
-        /// When a <see cref="Socket"/> is used from multiple threads, there's a race condition
-        /// between the invocation of <see cref="Socket.Poll(int, SelectMode)"/> and the moment
-        /// when the value of <see cref="Socket.Available"/> is obtained. To workaround this issue
-        /// we synchronize reads from the <see cref="Socket"/>.
-        /// </para>
-        /// </remarks>
-#else
-/// <summary>
-/// Gets a value indicating whether the socket is connected.
-/// </summary>
-/// <returns>
-/// <c>true</c> if the socket is connected; otherwise, <c>false</c>.
-/// </returns>
-/// <remarks>
-/// We verify whether <see cref="Socket.Connected"/> is <c>true</c>. However, this only returns the state
-/// of the socket as of the last I/O operation.
-/// </remarks>
-#endif
-        private bool IsSocketConnected()
-        {
-            lock (_socketDisposeLock)
-            {
-#if FEATURE_SOCKET_POLL
-                if (!_socket.IsConnected())
-                {
-                    return false;
-                }
-
-                lock (_socketReadLock)
-                {
-                    var connectionClosedOrDataAvailable = _socket.Poll(0, SelectMode.SelectRead);
-                    return !(connectionClosedOrDataAvailable && _socket.Available == 0);
-                }
-#else
-                return _socket.IsConnected();
-#endif // FEATURE_SOCKET_POLL
-            }
-        }
-
-        /// <summary>
-        /// Performs a blocking read on the socket until <paramref name="length"/> bytes are received.
-        /// </summary>
-        /// <param name="buffer">An array of type <see cref="byte"/> that is the storage location for the received data.</param>
-        /// <param name="offset">The position in <paramref name="buffer"/> parameter to store the received data.</param>
-        /// <param name="length">The number of bytes to read.</param>
-        /// <returns>
-        /// The number of bytes read.
-        /// </returns>
-        /// <exception cref="SshOperationTimeoutException">The read has timed-out.</exception>
-        /// <exception cref="SocketException">The read failed.</exception>
-        private int TrySocketRead(byte[] buffer, int offset, int length)
-        {
-            return SocketAbstraction.Read(_socket, buffer, offset, length, InfiniteTimeSpan);
-        }
-
-        /// <summary>
-        /// Performs a blocking read on the socket until a line is read.
-        /// </summary>
-        /// <param name="timeout">A <see cref="TimeSpan"/> that represents the time to wait until a line is read.</param>
-        /// <exception cref="SshOperationTimeoutException">The read has timed-out.</exception>
-        /// <exception cref="SocketException">An error occurred when trying to access the socket.</exception>
-        /// <returns>
-        /// The line read from the socket, or <c>null</c> when the remote server has shutdown and all data has been received.
-        /// </returns>
-        private string SocketReadLine(TimeSpan timeout)
-        {
-            var encoding = SshData.Ascii;
-            var buffer = new List<byte>();
-            var data = new byte[1];
-
-            // read data one byte at a time to find end of line and leave any unhandled information in the buffer
-            // to be processed by subsequent invocations
+          do
+          {
+            string input;
             do
             {
-                var bytesRead = SocketAbstraction.Read(_socket, data, 0, data.Length, timeout);
-                if (bytesRead == 0)
-                    // the remote server shut down the socket
-                    break;
-
-                buffer.Add(data[0]);
-            }
-            while (!(buffer.Count > 0 && (buffer[buffer.Count - 1] == LineFeed || buffer[buffer.Count - 1] == Null)));
-
-            if (buffer.Count == 0)
-                return null;
-            if (buffer.Count == 1 && buffer[buffer.Count - 1] == 0x00)
-                // return an empty version string if the buffer consists of only a 0x00 character
-                return string.Empty;
-            if (buffer.Count > 1 && buffer[buffer.Count - 2] == CarriageReturn)
-                // strip trailing CRLF
-                return encoding.GetString(buffer.ToArray(), 0, buffer.Count - 2);
-            if (buffer.Count > 1 && buffer[buffer.Count - 1] == LineFeed)
-                // strip trailing LF
-                return encoding.GetString(buffer.ToArray(), 0, buffer.Count - 1);
-            return encoding.GetString(buffer.ToArray(), 0, buffer.Count);
-        }
-
-        /// <summary>
-        /// Shuts down and disposes the socket.
-        /// </summary>
-        private void SocketDisconnectAndDispose()
-        {
-            if (_socket != null)
-            {
-                lock (_socketDisposeLock)
+              do
+              {
+                input = this.SocketReadLine(this.ConnectionInfo.Timeout);
+                if (input != null)
                 {
-                    if (_socket != null)
-                    {
-                        if (_socket.Connected)
-                        {
-                            try
-                            {
-                                DiagnosticAbstraction.Log(string.Format("[{0}] Shutting down socket.", ToHex(SessionId)));
-
-                                // interrupt any pending reads; should be done outside of socket read lock as we
-                                // actually want shutdown the socket to make sure blocking reads are interrupted
-                                //
-                                // this may result in a SocketException (eg. An existing connection was forcibly
-                                // closed by the remote host) which we'll log and ignore as it means the socket
-                                // was already shut down
-                                _socket.Shutdown(SocketShutdown.Send);
-                            }
-                            catch (SocketException ex)
-                            {
-                                // TODO: log as warning
-                                DiagnosticAbstraction.Log("Failure shutting down socket: " + ex);
-                            }
-                        }
-
-                        DiagnosticAbstraction.Log(string.Format("[{0}] Disposing socket.", ToHex(SessionId)));
-                        _socket.Dispose();
-                        DiagnosticAbstraction.Log(string.Format("[{0}] Disposed socket.", ToHex(SessionId)));
-                        _socket = null;
-                    }
+                  if (nullable1.HasValue)
+                  {
+                    match2 = regex2.Match(input);
+                    if (match2.Success)
+                      goto label_8;
+                  }
+                  else
+                    goto label_4;
                 }
+                else
+                  goto label_15;
+              }
+              while (input.Length != 0);
+              goto label_11;
+label_8:;
             }
+            while (!match2.Result("${fieldName}").Equals("Content-Length", StringComparison.OrdinalIgnoreCase));
+            goto label_9;
+label_4:
+            match1 = regex1.Match(input);
+          }
+          while (!match1.Success);
+          s1 = match1.Result("${statusCode}");
+          nullable1 = new HttpStatusCode?((HttpStatusCode) int.Parse(s1));
+          nullable2 = nullable1;
+          httpStatusCode = HttpStatusCode.OK;
         }
-
-        /// <summary>
-        /// Listens for incoming message from the server and handles them. This method run as a task on separate thread.
-        /// </summary>
-        private void MessageListener()
-        {
-#if FEATURE_SOCKET_SELECT
-            var readSockets = new List<Socket> { _socket };
-#endif // FEATURE_SOCKET_SELECT
-
-            try
-            {
-                // remain in message loop until socket is shut down or until we're disconnecting
-                while (_socket.IsConnected())
-                {
-#if FEATURE_SOCKET_SELECT
-                    // if the socket is already disposed when Select is invoked, then a SocketException
-                    // stating "An operation was attempted on something that is not a socket" is thrown;
-                    // we attempt to avoid this exception by having an IsConnected() that can break the
-                    // message loop
-                    //
-                    // note that there's no guarantee that the socket will not be disposed between the
-                    // IsConnected() check and the Select invocation; we can't take a "dispose" lock
-                    // that includes the Select invocation as we want Dispose() to be able to interrupt
-                    // the Select
-
-                    // perform a blocking select to determine whether there's is data available to be
-                    // read; we do not use a blocking read to allow us to use Socket.Poll to determine
-                    // if the connection is still available (in IsSocketConnected)
-
-                    Socket.Select(readSockets, null, null, -1);
-
-                    // the Select invocation will be interrupted in one of the following conditions:
-                    // * data is available to be read
-                    //   => the socket will not be removed from "readSockets"
-                    // * the socket connection is closed during the Select invocation
-                    //   => the socket will be removed from "readSockets"
-                    // * the socket is disposed during the Select invocation
-                    //   => the socket will not be removed from "readSocket"
-                    // 
-                    // since we handle the second and third condition the same way and Socket.Connected
-                    // allows us to check for both conditions, we use that instead of both checking for
-                    // the removal from "readSockets" and the Connection check
-                    if (!_socket.IsConnected())
-                    {
-                        // connection with SSH server was closed or socket was disposed;
-                        // break out of the message loop
-                        break;
-                    }
-#elif FEATURE_SOCKET_POLL
-                    // when Socket.Select(IList, IList, IList, Int32) is not available or is buggy, we use
-                    // Socket.Poll(Int, SelectMode) to block until either data is available or the socket
-                    // is closed
-                    _socket.Poll(-1, SelectMode.SelectRead);
-
-                    if (!_socket.IsConnected())
-                    {
-                        // connection with SSH server was closed or socket was disposed;
-                        // break out of the message loop
-                        break;
-                    }
-#endif // FEATURE_SOCKET_SELECT
-
-                    var message = ReceiveMessage();
-                    if (message == null)
-                    {
-                        // connection with SSH server was closed;
-                        // break out of the message loop
-                        break;
-                    }
-
-                    // process message
-                    message.Process(this);
-                }
-
-                // connection with SSH server was closed or socket was disposed
-                RaiseError(CreateConnectionAbortedByServerException());
-            }
-            catch (SocketException ex)
-            {
-                RaiseError(new SshConnectionException(ex.Message, DisconnectReason.ConnectionLost, ex));
-            }
-            catch (Exception exp)
-            {
-                RaiseError(exp);
-            }
-            finally
-            {
-                // signal that the message listener thread has stopped
-                _messageListenerCompleted.Set();
-            }
-        }
-
-        private byte SocketReadByte()
-        {
-            var buffer = new byte[1];
-            SocketRead(buffer, 0, 1);
-            return buffer[0];
-        }
-
-        private void ConnectSocks4()
-        {
-            var connectionRequest = CreateSocks4ConnectionRequest(ConnectionInfo.Host, (ushort) ConnectionInfo.Port, ConnectionInfo.ProxyUsername);
-            SocketAbstraction.Send(_socket, connectionRequest);
-
-            //  Read null byte
-            if (SocketReadByte() != 0)
-            {
-                throw new ProxyException("SOCKS4: Null is expected.");
-            }
-
-            //  Read response code
-            var code = SocketReadByte();
-
-            switch (code)
-            {
-                case 0x5a:
-                    break;
-                case 0x5b:
-                    throw new ProxyException("SOCKS4: Connection rejected.");
-                case 0x5c:
-                    throw new ProxyException("SOCKS4: Client is not running identd or not reachable from the server.");
-                case 0x5d:
-                    throw new ProxyException("SOCKS4: Client's identd could not confirm the user ID string in the request.");
-                default:
-                    throw new ProxyException("SOCKS4: Not valid response.");
-            }
-
-            var dummyBuffer = new byte[6]; // field 3 (2 bytes) and field 4 (4) should be ignored
-            SocketRead(dummyBuffer, 0, 6);
-        }
-
-        private void ConnectSocks5()
-        {
-            var greeting = new byte[]
-                {
-                    // SOCKS version number
-                    0x05,
-                    // Number of supported authentication methods
-                    0x02,
-                    // No authentication
-                    0x00,
-                    // Username/Password authentication
-                    0x02
-                };
-            SocketAbstraction.Send(_socket, greeting);
-
-            var socksVersion = SocketReadByte();
-            if (socksVersion != 0x05)
-                throw new ProxyException(string.Format("SOCKS Version '{0}' is not supported.", socksVersion));
-
-            var authenticationMethod = SocketReadByte();
-            switch (authenticationMethod)
-            {
-                case 0x00:
-                    break;
-                case 0x02:
-                    // Create username/password authentication request
-                    var authenticationRequest = CreateSocks5UserNameAndPasswordAuthenticationRequest(ConnectionInfo.ProxyUsername, ConnectionInfo.ProxyPassword);
-                    // Send authentication request
-                    SocketAbstraction.Send(_socket, authenticationRequest);
-                    // Read authentication result
-                    var authenticationResult = SocketAbstraction.Read(_socket, 2, ConnectionInfo.Timeout);
-
-                    if (authenticationResult[0] != 0x01)
-                        throw new ProxyException("SOCKS5: Server authentication version is not valid.");
-                    if (authenticationResult[1] != 0x00)
-                        throw new ProxyException("SOCKS5: Username/Password authentication failed.");
-                    break;
-                case 0xFF:
-                    throw new ProxyException("SOCKS5: No acceptable authentication methods were offered.");
-            }
-
-            var connectionRequest = CreateSocks5ConnectionRequest(ConnectionInfo.Host, (ushort) ConnectionInfo.Port);
-            SocketAbstraction.Send(_socket, connectionRequest);
-
-            //  Read Server SOCKS5 version
-            if (SocketReadByte() != 5)
-            {
-                throw new ProxyException("SOCKS5: Version 5 is expected.");
-            }
-
-            //  Read response code
-            var status = SocketReadByte();
-
-            switch (status)
-            {
-                case 0x00:
-                    break;
-                case 0x01:
-                    throw new ProxyException("SOCKS5: General failure.");
-                case 0x02:
-                    throw new ProxyException("SOCKS5: Connection not allowed by ruleset.");
-                case 0x03:
-                    throw new ProxyException("SOCKS5: Network unreachable.");
-                case 0x04:
-                    throw new ProxyException("SOCKS5: Host unreachable.");
-                case 0x05:
-                    throw new ProxyException("SOCKS5: Connection refused by destination host.");
-                case 0x06:
-                    throw new ProxyException("SOCKS5: TTL expired.");
-                case 0x07:
-                    throw new ProxyException("SOCKS5: Command not supported or protocol error.");
-                case 0x08:
-                    throw new ProxyException("SOCKS5: Address type not supported.");
-                default:
-                    throw new ProxyException("SOCKS5: Not valid response.");
-            }
-
-            //  Read reserved byte
-            if (SocketReadByte() != 0)
-            {
-                throw new ProxyException("SOCKS5: 0 byte is expected.");
-            }
-
-            var addressType = SocketReadByte();
-            switch (addressType)
-            {
-                case 0x01:
-                    var ipv4 = new byte[4];
-                    SocketRead(ipv4, 0, 4);
-                    break;
-                case 0x04:
-                    var ipv6 = new byte[16];
-                    SocketRead(ipv6, 0, 16);
-                    break;
-                default:
-                    throw new ProxyException(string.Format("Address type '{0}' is not supported.", addressType));
-            }
-
-            var port = new byte[2];
-
-            //  Read 2 bytes to be ignored
-            SocketRead(port, 0, 2);
-        }
-
-        /// <summary>
-        /// https://tools.ietf.org/html/rfc1929
-        /// </summary>
-        private static byte[] CreateSocks5UserNameAndPasswordAuthenticationRequest(string username, string password)
-        {
-            if (username.Length > byte.MaxValue)
-                throw new ProxyException("Proxy username is too long.");
-            if (password.Length > byte.MaxValue)
-                throw new ProxyException("Proxy password is too long.");
-
-            var authenticationRequest = new byte
-                [
-                    // Version of the negotiation
-                    1 +
-                    // Length of the username
-                    1 +
-                    // Username
-                    username.Length +
-                    // Length of the password
-                    1 +
-                    // Password
-                    password.Length
-                ];
-
-            var index = 0;
-
-            // Version of the negiotiation
-            authenticationRequest[index++] = 0x01;
-
-            // Length of the username
-            authenticationRequest[index++] = (byte) username.Length;
-
-            // Username
-            SshData.Ascii.GetBytes(username, 0, username.Length, authenticationRequest, index);
-            index += username.Length;
-
-            // Length of the password
-            authenticationRequest[index++] = (byte) password.Length;
-
-            // Password
-            SshData.Ascii.GetBytes(password, 0, password.Length, authenticationRequest, index);
-
-            return authenticationRequest;
-        }
-
-        private static byte[] CreateSocks4ConnectionRequest(string hostname, ushort port, string username)
-        {
-            var addressBytes = GetSocks4DestinationAddress(hostname);
-
-            var connectionRequest = new byte
-                [
-                    // SOCKS version number
-                    1 +
-                    // Command code
-                    1 +
-                    // Port number
-                    2 +
-                    // IP address
-                    addressBytes.Length +
-                    // Username
-                    username.Length +
-                    // Null terminator
-                    1
-                ];
-
-            var index = 0;
-
-            // SOCKS version number
-            connectionRequest[index++] = 0x04;
-
-            // Command code
-            connectionRequest[index++] = 0x01; // establish a TCP/IP stream connection
-
-            // Port number
-            Pack.UInt16ToBigEndian(port, connectionRequest, index);
-            index += 2;
-
-            // Address
-            Buffer.BlockCopy(addressBytes, 0, connectionRequest, index, addressBytes.Length);
-            index += addressBytes.Length;
-
-            connectionRequest[index] = 0x00;
-
-            return connectionRequest;
-        }
-
-        private static byte[] CreateSocks5ConnectionRequest(string hostname, ushort port)
-        {
-            byte addressType;
-            var addressBytes = GetSocks5DestinationAddress(hostname, out addressType);
-
-            var connectionRequest = new byte
-                [
-                    // SOCKS version number
-                    1 +
-                    // Command code
-                    1 +
-                    // Reserved
-                    1 +
-                    // Address type
-                    1 +
-                    // Address
-                    addressBytes.Length +
-                    // Port number
-                    2
-                ];
-
-            var index = 0;
-
-            // SOCKS version number
-            connectionRequest[index++] = 0x05;
-
-            // Command code
-            connectionRequest[index++] = 0x01; // establish a TCP/IP stream connection
-
-            // Reserved
-            connectionRequest[index++] = 0x00;
-
-            // Address type
-            connectionRequest[index++] = addressType;
-            
-            // Address
-            Buffer.BlockCopy(addressBytes, 0, connectionRequest, index, addressBytes.Length);
-            index += addressBytes.Length;
-
-            // Port number
-            Pack.UInt16ToBigEndian(port, connectionRequest, index);
-
-            return connectionRequest;
-        }
-
-        private static byte[] GetSocks4DestinationAddress(string hostname)
-        {
-            var addresses = DnsAbstraction.GetHostAddresses(hostname);
-
-            for (var i = 0; i < addresses.Length; i++)
-            {
-                var address = addresses[i];
-                if (address.AddressFamily == AddressFamily.InterNetwork)
-                    return address.GetAddressBytes();
-            }
-
-            throw new ProxyException(string.Format("SOCKS4 only supports IPv4. No such address found for '{0}'.", hostname));
-        }
-
-        private static byte[] GetSocks5DestinationAddress(string hostname, out byte addressType)
-        {
-            var ip = DnsAbstraction.GetHostAddresses(hostname)[0];
-
-            byte[] address;
-
-            switch (ip.AddressFamily)
-            {
-                case AddressFamily.InterNetwork:
-                    addressType = 0x01; // IPv4
-                    address = ip.GetAddressBytes();
-                    break;
-                case AddressFamily.InterNetworkV6:
-                    addressType = 0x04; // IPv6
-                    address = ip.GetAddressBytes();
-                    break;
-                default:
-                    throw new ProxyException(string.Format("SOCKS5: IP address '{0}' is not supported.", ip));
-            }
-
-            return address;
-        }
-
-        private void ConnectHttp()
-        {
-            var httpResponseRe = new Regex(@"HTTP/(?<version>\d[.]\d) (?<statusCode>\d{3}) (?<reasonPhrase>.+)$");
-            var httpHeaderRe = new Regex(@"(?<fieldName>[^\[\]()<>@,;:\""/?={} \t]+):(?<fieldValue>.+)?");
-
-            SocketAbstraction.Send(_socket, SshData.Ascii.GetBytes(string.Format("CONNECT {0}:{1} HTTP/1.0\r\n", ConnectionInfo.Host, ConnectionInfo.Port)));
-
-            //  Sent proxy authorization is specified
-            if (!string.IsNullOrEmpty(ConnectionInfo.ProxyUsername))
-            {
-                var authorization = string.Format("Proxy-Authorization: Basic {0}\r\n",
-                                                  Convert.ToBase64String(SshData.Ascii.GetBytes(string.Format("{0}:{1}", ConnectionInfo.ProxyUsername, ConnectionInfo.ProxyPassword)))
-                                                  );
-                SocketAbstraction.Send(_socket, SshData.Ascii.GetBytes(authorization));
-            }
-
-            SocketAbstraction.Send(_socket, SshData.Ascii.GetBytes("\r\n"));
-
-            HttpStatusCode? statusCode = null;
-            var contentLength = 0;
-
-            while (true)
-            {
-                var response = SocketReadLine(ConnectionInfo.Timeout);
-                if (response == null)
-                    // server shut down socket
-                    break;
-
-                if (statusCode == null)
-                {
-                    var statusMatch = httpResponseRe.Match(response);
-                    if (statusMatch.Success)
-                    {
-                        var httpStatusCode = statusMatch.Result("${statusCode}");
-                        statusCode = (HttpStatusCode) int.Parse(httpStatusCode);
-                        if (statusCode != HttpStatusCode.OK)
-                        {
-                            var reasonPhrase = statusMatch.Result("${reasonPhrase}");
-                            throw new ProxyException(string.Format("HTTP: Status code {0}, \"{1}\"", httpStatusCode,
-                                reasonPhrase));
-                        }
-                    }
-
-                    continue;
-                }
-
-                // continue on parsing message headers coming from the server
-                var headerMatch = httpHeaderRe.Match(response);
-                if (headerMatch.Success)
-                {
-                    var fieldName = headerMatch.Result("${fieldName}");
-                    if (fieldName.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
-                    {
-                        contentLength = int.Parse(headerMatch.Result("${fieldValue}"));
-                    }
-                    continue;
-                }
-
-                // check if we've reached the CRLF which separates request line and headers from the message body
-                if (response.Length == 0)
-                {
-                    //  read response body if specified
-                    if (contentLength > 0)
-                    {
-                        var contentBody = new byte[contentLength];
-                        SocketRead(contentBody, 0, contentLength);
-                    }
-                    break;
-                }
-            }
-
-            if (statusCode == null)
-                throw new ProxyException("HTTP response does not contain status line.");
-        }
-
-        /// <summary>
-        /// Raises the <see cref="ErrorOccured"/> event.
-        /// </summary>
-        /// <param name="exp">The <see cref="Exception"/>.</param>
-        private void RaiseError(Exception exp)
-        {
-            var connectionException = exp as SshConnectionException;
-
-            DiagnosticAbstraction.Log(string.Format("[{0}] Raised exception: {1}", ToHex(SessionId), exp));
-
-            if (_isDisconnecting)
-            {
-                //  a connection exception which is raised while isDisconnecting is normal and
-                //  should be ignored
-                if (connectionException != null)
-                    return;
-
-                // any timeout while disconnecting can be caused by loss of connectivity
-                // altogether and should be ignored
-                var socketException = exp as SocketException;
-                if (socketException != null && socketException.SocketErrorCode == SocketError.TimedOut)
-                    return;
-            }
-
-            // "save" exception and set exception wait handle to ensure any waits are interrupted
-            _exception = exp;
-            _exceptionWaitHandle.Set();
-
-            var errorOccured = ErrorOccured;
-            if (errorOccured != null)
-                errorOccured(this, new ExceptionEventArgs(exp));
-
-            if (connectionException != null)
-            {
-                DiagnosticAbstraction.Log(string.Format("[{0}] Disconnecting after exception: {1}", ToHex(SessionId), exp));
-                Disconnect(connectionException.DisconnectReason, exp.ToString());
-            }
-        }
-
-        /// <summary>
-        /// Resets connection-specific information to ensure state of a previous connection
-        /// does not affect new connections.
-        /// </summary>
-        private void Reset()
-        {
-            if (_exceptionWaitHandle != null)
-                _exceptionWaitHandle.Reset();
-            if (_keyExchangeCompletedWaitHandle != null)
-                _keyExchangeCompletedWaitHandle.Reset();
-            if (_messageListenerCompleted != null)
-                _messageListenerCompleted.Set();
-
-            SessionId = null;
-            _isDisconnectMessageSent = false;
-            _isDisconnecting = false;
-            _isAuthenticated = false;
-            _exception = null;
-            _keyExchangeInProgress = false;
-        }
-
-        private static SshConnectionException CreateConnectionAbortedByServerException()
-        {
-            return new SshConnectionException("An established connection was aborted by the server.",
-                                              DisconnectReason.ConnectionLost);
-        }
-
-        #region IDisposable implementation
-
-        private bool _disposed;
-
-        /// <summary>
-        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Releases unmanaged and - optionally - managed resources
-        /// </summary>
-        /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (_disposed)
-                return;
-
-            if (disposing)
-            {
-                DiagnosticAbstraction.Log(string.Format("[{0}] Disposing session.", ToHex(SessionId)));
-
-                Disconnect();
-
-                var serviceAccepted = _serviceAccepted;
-                if (serviceAccepted != null)
-                {
-                    serviceAccepted.Dispose();
-                    _serviceAccepted = null;
-                }
-
-                var exceptionWaitHandle = _exceptionWaitHandle;
-                if (exceptionWaitHandle != null)
-                {
-                    exceptionWaitHandle.Dispose();
-                    _exceptionWaitHandle = null;
-                }
-
-                var keyExchangeCompletedWaitHandle = _keyExchangeCompletedWaitHandle;
-                if (keyExchangeCompletedWaitHandle != null)
-                {
-                    keyExchangeCompletedWaitHandle.Dispose();
-                    _keyExchangeCompletedWaitHandle = null;
-                }
-
-                var serverMac = _serverMac;
-                if (serverMac != null)
-                {
-                    serverMac.Dispose();
-                    _serverMac = null;
-                }
-
-                var clientMac = _clientMac;
-                if (clientMac != null)
-                {
-                    clientMac.Dispose();
-                    _clientMac = null;
-                }
-
-                var keyExchange = _keyExchange;
-                if (keyExchange != null)
-                {
-                    keyExchange.HostKeyReceived -= KeyExchange_HostKeyReceived;
-                    keyExchange.Dispose();
-                    _keyExchange = null;
-                }
-
-                var messageListenerCompleted = _messageListenerCompleted;
-                if (messageListenerCompleted != null)
-                {
-                    messageListenerCompleted.Dispose();
-                    _messageListenerCompleted = null;
-                }
-
-                _disposed = true;
-            }
-        }
-
-        /// <summary>
-        /// Releases unmanaged resources and performs other cleanup operations before the
-        /// <see cref="Session"/> is reclaimed by garbage collection.
-        /// </summary>
-        ~Session()
-        {
-            Dispose(false);
-        }
-
-        #endregion IDisposable implementation
-
-        #region ISession implementation
-
-        /// <summary>
-        /// Gets or sets the connection info.
-        /// </summary>
-        /// <value>The connection info.</value>
-        IConnectionInfo ISession.ConnectionInfo
-        {
-            get { return ConnectionInfo; }
-        }
-
-        WaitHandle ISession.MessageListenerCompleted
-        {
-            get { return _messageListenerCompleted; }
-        }
-
-        /// <summary>
-        /// Create a new SSH session channel.
-        /// </summary>
-        /// <returns>
-        /// A new SSH session channel.
-        /// </returns>
-        IChannelSession ISession.CreateChannelSession()
-        {
-            return new ChannelSession(this, NextChannelNumber, InitialLocalWindowSize, LocalChannelDataPacketSize);
-        }
-
-        /// <summary>
-        /// Create a new channel for a locally forwarded TCP/IP port.
-        /// </summary>
-        /// <returns>
-        /// A new channel for a locally forwarded TCP/IP port.
-        /// </returns>
-        IChannelDirectTcpip ISession.CreateChannelDirectTcpip()
-        {
-            return new ChannelDirectTcpip(this, NextChannelNumber, InitialLocalWindowSize, LocalChannelDataPacketSize);
-        }
-
-        /// <summary>
-        /// Creates a "forwarded-tcpip" SSH channel.
-        /// </summary>
-        /// <returns>
-        /// A new "forwarded-tcpip" SSH channel.
-        /// </returns>
-        IChannelForwardedTcpip ISession.CreateChannelForwardedTcpip(uint remoteChannelNumber,
-                                                                    uint remoteWindowSize,
-                                                                    uint remoteChannelDataPacketSize)
-        {
-            return new ChannelForwardedTcpip(this,
-                                             NextChannelNumber,
-                                             InitialLocalWindowSize,
-                                             LocalChannelDataPacketSize,
-                                             remoteChannelNumber,
-                                             remoteWindowSize,
-                                             remoteChannelDataPacketSize);
-        }
-
-        /// <summary>
-        /// Sends a message to the server.
-        /// </summary>
-        /// <param name="message">The message to send.</param>
-        /// <exception cref="SshConnectionException">The client is not connected.</exception>
-        /// <exception cref="SshOperationTimeoutException">The operation timed out.</exception>
-        /// <exception cref="InvalidOperationException">The size of the packet exceeds the maximum size defined by the protocol.</exception>
-        void ISession.SendMessage(Message message)
-        {
-            SendMessage(message);
-        }
-
-        /// <summary>
-        /// Sends a message to the server.
-        /// </summary>
-        /// <param name="message">The message to send.</param>
-        /// <returns>
-        /// <c>true</c> if the message was sent to the server; otherwise, <c>false</c>.
-        /// </returns>
-        /// <exception cref="InvalidOperationException">The size of the packet exceeds the maximum size defined by the protocol.</exception>
-        /// <remarks>
-        /// This methods returns <c>false</c> when the attempt to send the message results in a
-        /// <see cref="SocketException"/> or a <see cref="SshException"/>.
-        /// </remarks>
-        bool ISession.TrySendMessage(Message message)
-        {
-            return TrySendMessage(message);
-        }
-
-        #endregion ISession implementation
+        while (nullable2.GetValueOrDefault() == httpStatusCode & nullable2.HasValue);
+        break;
+label_9:
+        length = int.Parse(match2.Result("${fieldValue}"));
+      }
+      string str = match1.Result("${reasonPhrase}");
+      throw new ProxyException(string.Format("HTTP: Status code {0}, \"{1}\"", (object) s1, (object) str));
+label_11:
+      if (length > 0)
+        this.SocketRead(new byte[length], 0, length);
+label_15:
+      if (!nullable1.HasValue)
+        throw new ProxyException("HTTP response does not contain status line.");
     }
 
-    /// <summary>
-    /// Represents the result of a wait operations.
-    /// </summary>
-    internal enum WaitResult
+    private void RaiseError(Exception exp)
     {
-        /// <summary>
-        /// The <see cref="WaitHandle"/> was signaled within the specified interval.
-        /// </summary>
-        Success = 1,
-
-        /// <summary>
-        /// The <see cref="WaitHandle"/> was not signaled within the specified interval.
-        /// </summary>
-        TimedOut = 2,
-
-        /// <summary>
-        /// The session is in a disconnected state.
-        /// </summary>
-        Disconnected = 3,
-
-        /// <summary>
-        /// The session is in a failed state.
-        /// </summary>
-        Failed = 4
+      SshConnectionException connectionException = exp as SshConnectionException;
+      DiagnosticAbstraction.Log(string.Format("[{0}] Raised exception: {1}", (object) Session.ToHex(this.SessionId), (object) exp));
+      if (this._isDisconnecting && (connectionException != null || exp is SocketException socketException && socketException.SocketErrorCode == SocketError.TimedOut))
+        return;
+      this._exception = exp;
+      this._exceptionWaitHandle.Set();
+      EventHandler<ExceptionEventArgs> errorOccured = this.ErrorOccured;
+      if (errorOccured != null)
+        errorOccured((object) this, new ExceptionEventArgs(exp));
+      if (connectionException == null)
+        return;
+      DiagnosticAbstraction.Log(string.Format("[{0}] Disconnecting after exception: {1}", (object) Session.ToHex(this.SessionId), (object) exp));
+      this.Disconnect(connectionException.DisconnectReason, exp.ToString());
     }
+
+    private void Reset()
+    {
+      if (this._exceptionWaitHandle != null)
+        this._exceptionWaitHandle.Reset();
+      if (this._keyExchangeCompletedWaitHandle != null)
+        this._keyExchangeCompletedWaitHandle.Reset();
+      if (this._messageListenerCompleted != null)
+        this._messageListenerCompleted.Set();
+      this.SessionId = (byte[]) null;
+      this._isDisconnectMessageSent = false;
+      this._isDisconnecting = false;
+      this._isAuthenticated = false;
+      this._exception = (Exception) null;
+      this._keyExchangeInProgress = false;
+    }
+
+    private static SshConnectionException CreateConnectionAbortedByServerException() => new SshConnectionException("An established connection was aborted by the server.", DisconnectReason.ConnectionLost);
+
+    public void Dispose()
+    {
+      this.Dispose(true);
+      GC.SuppressFinalize((object) this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+      if (this._disposed || !disposing)
+        return;
+      DiagnosticAbstraction.Log(string.Format("[{0}] Disposing session.", (object) Session.ToHex(this.SessionId)));
+      this.Disconnect();
+      EventWaitHandle serviceAccepted = this._serviceAccepted;
+      if (serviceAccepted != null)
+      {
+        serviceAccepted.Dispose();
+        this._serviceAccepted = (EventWaitHandle) null;
+      }
+      EventWaitHandle exceptionWaitHandle = this._exceptionWaitHandle;
+      if (exceptionWaitHandle != null)
+      {
+        exceptionWaitHandle.Dispose();
+        this._exceptionWaitHandle = (EventWaitHandle) null;
+      }
+      EventWaitHandle completedWaitHandle = this._keyExchangeCompletedWaitHandle;
+      if (completedWaitHandle != null)
+      {
+        completedWaitHandle.Dispose();
+        this._keyExchangeCompletedWaitHandle = (EventWaitHandle) null;
+      }
+      HashAlgorithm serverMac = this._serverMac;
+      if (serverMac != null)
+      {
+        serverMac.Dispose();
+        this._serverMac = (HashAlgorithm) null;
+      }
+      HashAlgorithm clientMac = this._clientMac;
+      if (clientMac != null)
+      {
+        clientMac.Dispose();
+        this._clientMac = (HashAlgorithm) null;
+      }
+      IKeyExchange keyExchange = this._keyExchange;
+      if (keyExchange != null)
+      {
+        keyExchange.HostKeyReceived -= new EventHandler<HostKeyEventArgs>(this.KeyExchange_HostKeyReceived);
+        keyExchange.Dispose();
+        this._keyExchange = (IKeyExchange) null;
+      }
+      EventWaitHandle listenerCompleted = this._messageListenerCompleted;
+      if (listenerCompleted != null)
+      {
+        listenerCompleted.Dispose();
+        this._messageListenerCompleted = (EventWaitHandle) null;
+      }
+      this._disposed = true;
+    }
+
+    ~Session() => this.Dispose(false);
+
+    IConnectionInfo ISession.ConnectionInfo => (IConnectionInfo) this.ConnectionInfo;
+
+    WaitHandle ISession.MessageListenerCompleted => (WaitHandle) this._messageListenerCompleted;
+
+    IChannelSession ISession.CreateChannelSession() => (IChannelSession) new ChannelSession((ISession) this, this.NextChannelNumber, (uint) int.MaxValue, 65536U);
+
+    IChannelDirectTcpip ISession.CreateChannelDirectTcpip() => (IChannelDirectTcpip) new ChannelDirectTcpip((ISession) this, this.NextChannelNumber, (uint) int.MaxValue, 65536U);
+
+    IChannelForwardedTcpip ISession.CreateChannelForwardedTcpip(
+      uint remoteChannelNumber,
+      uint remoteWindowSize,
+      uint remoteChannelDataPacketSize)
+    {
+      return (IChannelForwardedTcpip) new ChannelForwardedTcpip((ISession) this, this.NextChannelNumber, (uint) int.MaxValue, 65536U, remoteChannelNumber, remoteWindowSize, remoteChannelDataPacketSize);
+    }
+
+    void ISession.SendMessage(Message message) => this.SendMessage(message);
+
+    bool ISession.TrySendMessage(Message message) => this.TrySendMessage(message);
+  }
 }

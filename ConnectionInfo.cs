@@ -1,468 +1,371 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.ConnectionInfo
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Abstractions;
-using Renci.SshNet.Security;
-using Renci.SshNet.Messages.Connection;
 using Renci.SshNet.Common;
 using Renci.SshNet.Messages.Authentication;
-using Renci.SshNet.Security.Cryptography.Ciphers.Modes;
+using Renci.SshNet.Messages.Connection;
+using Renci.SshNet.Security;
+using Renci.SshNet.Security.Cryptography;
 using Renci.SshNet.Security.Cryptography.Ciphers;
+using Renci.SshNet.Security.Cryptography.Ciphers.Modes;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Renci.SshNet
 {
-    /// <summary>
-    /// Represents remote connection information class.
-    /// </summary>
-    /// <remarks>
-    /// This class is NOT thread-safe. Do not use the same <see cref="ConnectionInfo"/> with multiple
-    /// client instances.
-    /// </remarks>
-    public class ConnectionInfo : IConnectionInfoInternal
+  public class ConnectionInfo : IConnectionInfoInternal, IConnectionInfo
+  {
+    internal static int DefaultPort = 22;
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30.0);
+    private static readonly TimeSpan DefaultChannelCloseTimeout = TimeSpan.FromSeconds(1.0);
+
+    public IDictionary<string, Type> KeyExchangeAlgorithms { get; private set; }
+
+    public IDictionary<string, CipherInfo> Encryptions { get; private set; }
+
+    public IDictionary<string, HashInfo> HmacAlgorithms { get; private set; }
+
+    public IDictionary<string, Func<byte[], KeyHostAlgorithm>> HostKeyAlgorithms { get; private set; }
+
+    public IList<AuthenticationMethod> AuthenticationMethods { get; private set; }
+
+    public IDictionary<string, Type> CompressionAlgorithms { get; private set; }
+
+    public IDictionary<string, RequestInfo> ChannelRequests { get; private set; }
+
+    public bool IsAuthenticated { get; private set; }
+
+    public string Host { get; private set; }
+
+    public int Port { get; private set; }
+
+    public string Username { get; private set; }
+
+    public ProxyTypes ProxyType { get; private set; }
+
+    public string ProxyHost { get; private set; }
+
+    public int ProxyPort { get; private set; }
+
+    public string ProxyUsername { get; private set; }
+
+    public string ProxyPassword { get; private set; }
+
+    public TimeSpan Timeout { get; set; }
+
+    public TimeSpan ChannelCloseTimeout { get; set; }
+
+    public Encoding Encoding { get; set; }
+
+    public int RetryAttempts { get; set; }
+
+    public int MaxSessions { get; set; }
+
+    public event EventHandler<AuthenticationBannerEventArgs> AuthenticationBanner;
+
+    public string CurrentKeyExchangeAlgorithm { get; internal set; }
+
+    public string CurrentServerEncryption { get; internal set; }
+
+    public string CurrentClientEncryption { get; internal set; }
+
+    public string CurrentServerHmacAlgorithm { get; internal set; }
+
+    public string CurrentClientHmacAlgorithm { get; internal set; }
+
+    public string CurrentHostKeyAlgorithm { get; internal set; }
+
+    public string CurrentServerCompressionAlgorithm { get; internal set; }
+
+    public string ServerVersion { get; internal set; }
+
+    public string ClientVersion { get; internal set; }
+
+    public string CurrentClientCompressionAlgorithm { get; internal set; }
+
+    public ConnectionInfo(
+      string host,
+      string username,
+      params AuthenticationMethod[] authenticationMethods)
+      : this(host, ConnectionInfo.DefaultPort, username, ProxyTypes.None, (string) null, 0, (string) null, (string) null, authenticationMethods)
     {
-        internal static int DefaultPort = 22;
-
-        /// <summary>
-        /// The default connection timeout.
-        /// </summary>
-        /// <value>
-        /// 30 seconds.
-        /// </value>
-        private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
-
-        /// <summary>
-        /// The default channel close timeout.
-        /// </summary>
-        /// <value>
-        /// 1 second.
-        /// </value>
-        private static readonly TimeSpan DefaultChannelCloseTimeout = TimeSpan.FromSeconds(1);
-
-        /// <summary>
-        /// Gets supported key exchange algorithms for this connection.
-        /// </summary>
-        public IDictionary<string, Type> KeyExchangeAlgorithms { get; private set; }
-
-        /// <summary>
-        /// Gets supported encryptions for this connection.
-        /// </summary>
-        public IDictionary<string, CipherInfo> Encryptions { get; private set; }
-
-        /// <summary>
-        /// Gets supported hash algorithms for this connection.
-        /// </summary>
-        public IDictionary<string, HashInfo> HmacAlgorithms { get; private set; }
-
-        /// <summary>
-        /// Gets supported host key algorithms for this connection.
-        /// </summary>
-        public IDictionary<string, Func<byte[], KeyHostAlgorithm>> HostKeyAlgorithms { get; private set; }
-
-        /// <summary>
-        /// Gets supported authentication methods for this connection.
-        /// </summary>
-        public IList<AuthenticationMethod> AuthenticationMethods { get; private set; }
-
-        /// <summary>
-        /// Gets supported compression algorithms for this connection.
-        /// </summary>
-        public IDictionary<string, Type> CompressionAlgorithms { get; private set; }
-
-        /// <summary>
-        /// Gets the supported channel requests for this connection.
-        /// </summary>
-        /// <value>
-        /// The supported channel requests for this connection.
-        /// </value>
-        public IDictionary<string, RequestInfo> ChannelRequests { get; private set; }
-
-        /// <summary>
-        /// Gets a value indicating whether connection is authenticated.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if connection is authenticated; otherwise, <c>false</c>.
-        /// </value>
-        public bool IsAuthenticated { get; private set; }
-
-        /// <summary>
-        /// Gets connection host.
-        /// </summary>
-        public string Host { get; private set; }
-
-        /// <summary>
-        /// Gets connection port.
-        /// </summary>
-        /// <value>
-        /// The connection port. The default value is 22.
-        /// </value>
-        public int Port { get; private set; }
-
-        /// <summary>
-        /// Gets connection username.
-        /// </summary>
-        public string Username { get; private set; }
-
-        /// <summary>
-        /// Gets proxy type.
-        /// </summary>
-        /// <value>
-        /// The type of the proxy.
-        /// </value>
-        public ProxyTypes ProxyType { get; private set; }
-
-        /// <summary>
-        /// Gets proxy connection host.
-        /// </summary>
-        public string ProxyHost { get; private set; }
-
-        /// <summary>
-        /// Gets proxy connection port.
-        /// </summary>
-        public int ProxyPort { get; private set; }
-
-        /// <summary>
-        /// Gets proxy connection username.
-        /// </summary>
-        public string ProxyUsername { get; private set; }
-
-        /// <summary>
-        /// Gets proxy connection password.
-        /// </summary>
-        public string ProxyPassword { get; private set; }
-
-        /// <summary>
-        /// Gets or sets connection timeout.
-        /// </summary>
-        /// <value>
-        /// The connection timeout. The default value is 30 seconds.
-        /// </value>
-        /// <example>
-        ///   <code source="..\..\src\Renci.SshNet.Tests\Classes\SshClientTest.cs" region="Example SshClient Connect Timeout" language="C#" title="Specify connection timeout" />
-        /// </example>
-        public TimeSpan Timeout { get; set; }
-
-        /// <summary>
-        /// Gets or sets the timeout to used when waiting for a server to acknowledge closing a channel.
-        /// </summary>
-        /// <value>
-        /// The channel close timeout. The default value is 1 second.
-        /// </value>
-        /// <remarks>
-        /// If a server does not send a <c>SSH2_MSG_CHANNEL_CLOSE</c> message before the specified timeout
-        /// elapses, the channel will be closed immediately.
-        /// </remarks>
-        public TimeSpan ChannelCloseTimeout { get; set; }
-
-        /// <summary>
-        /// Gets or sets the character encoding.
-        /// </summary>
-        /// <value>
-        /// The character encoding. The default is <see cref="System.Text.Encoding.UTF8"/>.
-        /// </value>
-        public Encoding Encoding { get; set; }
-
-        /// <summary>
-        /// Gets or sets number of retry attempts when session channel creation failed.
-        /// </summary>
-        /// <value>
-        /// The number of retry attempts when session channel creation failed. The default
-        /// value is 10.
-        /// </value>
-        public int RetryAttempts { get; set; }
-
-        /// <summary>
-        /// Gets or sets maximum number of session channels to be open simultaneously.
-        /// </summary>
-        /// <value>
-        /// The maximum number of session channels to be open simultaneously. The default
-        /// value is 10.
-        /// </value>
-        public int MaxSessions { get; set; }
-
-        /// <summary>
-        /// Occurs when authentication banner is sent by the server.
-        /// </summary>
-        /// <example>
-        ///     <code source="..\..\src\Renci.SshNet.Tests\Classes\PasswordConnectionInfoTest.cs" region="Example PasswordConnectionInfo AuthenticationBanner" language="C#" title="Display authentication banner" />
-        /// </example>
-        public event EventHandler<AuthenticationBannerEventArgs> AuthenticationBanner;
-
-        /// <summary>
-        /// Gets the current key exchange algorithm.
-        /// </summary>
-        public string CurrentKeyExchangeAlgorithm { get; internal set; }
-
-        /// <summary>
-        /// Gets the current server encryption.
-        /// </summary>
-        public string CurrentServerEncryption { get; internal set; }
-
-        /// <summary>
-        /// Gets the current client encryption.
-        /// </summary>
-        public string CurrentClientEncryption { get; internal set; }
-
-        /// <summary>
-        /// Gets the current server hash algorithm.
-        /// </summary>
-        public string CurrentServerHmacAlgorithm { get; internal set; }
-
-        /// <summary>
-        /// Gets the current client hash algorithm.
-        /// </summary>
-        public string CurrentClientHmacAlgorithm { get; internal set; }
-
-        /// <summary>
-        /// Gets the current host key algorithm.
-        /// </summary>
-        public string CurrentHostKeyAlgorithm { get; internal set; }
-
-        /// <summary>
-        /// Gets the current server compression algorithm.
-        /// </summary>
-        public string CurrentServerCompressionAlgorithm { get; internal set; }
-
-        /// <summary>
-        /// Gets the server version.
-        /// </summary>
-        public string ServerVersion { get; internal set; }
-
-        /// <summary>
-        /// Get the client version.
-        /// </summary>
-        public string ClientVersion { get; internal set; }
-
-        /// <summary>
-        /// Gets the current client compression algorithm.
-        /// </summary>
-        public string CurrentClientCompressionAlgorithm { get; internal set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ConnectionInfo"/> class.
-        /// </summary>
-        /// <param name="host">The host.</param>
-        /// <param name="username">The username.</param>
-        /// <param name="authenticationMethods">The authentication methods.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="host"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="host"/> is a zero-length string.</exception>
-        /// <exception cref="ArgumentException"><paramref name="username" /> is <c>null</c>, a zero-length string or contains only whitespace characters.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="authenticationMethods"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">No <paramref name="authenticationMethods"/> specified.</exception>
-        public ConnectionInfo(string host, string username, params AuthenticationMethod[] authenticationMethods)
-            : this(host, DefaultPort, username, ProxyTypes.None, null, 0, null, null, authenticationMethods)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ConnectionInfo"/> class.
-        /// </summary>
-        /// <param name="host">The host.</param>
-        /// <param name="port">The port.</param>
-        /// <param name="username">The username.</param>
-        /// <param name="authenticationMethods">The authentication methods.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="host"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="username" /> is <c>null</c>, a zero-length string or contains only whitespace characters.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="port" /> is not within <see cref="F:System.Net.IPEndPoint.MinPort" /> and <see cref="F:System.Net.IPEndPoint.MaxPort" />.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="authenticationMethods"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">No <paramref name="authenticationMethods"/> specified.</exception>
-        public ConnectionInfo(string host, int port, string username, params AuthenticationMethod[] authenticationMethods)
-            : this(host, port, username, ProxyTypes.None, null, 0, null, null, authenticationMethods)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ConnectionInfo" /> class.
-        /// </summary>
-        /// <param name="host">Connection host.</param>
-        /// <param name="port">Connection port.</param>
-        /// <param name="username">Connection username.</param>
-        /// <param name="proxyType">Type of the proxy.</param>
-        /// <param name="proxyHost">The proxy host.</param>
-        /// <param name="proxyPort">The proxy port.</param>
-        /// <param name="proxyUsername">The proxy username.</param>
-        /// <param name="proxyPassword">The proxy password.</param>
-        /// <param name="authenticationMethods">The authentication methods.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="host"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="username" /> is <c>null</c>, a zero-length string or contains only whitespace characters.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="port" /> is not within <see cref="F:System.Net.IPEndPoint.MinPort" /> and <see cref="F:System.Net.IPEndPoint.MaxPort" />.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="proxyType"/> is not <see cref="ProxyTypes.None"/> and <paramref name="proxyHost" /> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="proxyType"/> is not <see cref="ProxyTypes.None"/> and <paramref name="proxyPort" /> is not within <see cref="F:System.Net.IPEndPoint.MinPort" /> and <see cref="F:System.Net.IPEndPoint.MaxPort" />.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="authenticationMethods"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">No <paramref name="authenticationMethods"/> specified.</exception>
-        public ConnectionInfo(string host, int port, string username, ProxyTypes proxyType, string proxyHost, int proxyPort, string proxyUsername, string proxyPassword, params AuthenticationMethod[] authenticationMethods)
-        {
-            if (host == null)
-                throw new ArgumentNullException("host");
-            port.ValidatePort("port");
-
-            if (username == null)
-                throw new ArgumentNullException("username");
-            if (username.All(char.IsWhiteSpace))
-                throw new ArgumentException("Cannot be empty or contain only whitespace.", "username");
-
-            if (proxyType != ProxyTypes.None)
-            {
-                if (proxyHost == null)
-                    throw new ArgumentNullException("proxyHost");
-                proxyPort.ValidatePort("proxyPort");
-            }
-
-            if (authenticationMethods == null)
-                throw new ArgumentNullException("authenticationMethods");
-            if (authenticationMethods.Length == 0)
-                throw new ArgumentException("At least one authentication method should be specified.", "authenticationMethods");
-
-            //  Set default connection values
-            Timeout = DefaultTimeout;
-            ChannelCloseTimeout = DefaultChannelCloseTimeout;
-            RetryAttempts = 10;
-            MaxSessions = 10;
-            Encoding = Encoding.UTF8;
-
-            KeyExchangeAlgorithms = new Dictionary<string, Type>
-                {
-                    {"diffie-hellman-group-exchange-sha256", typeof (KeyExchangeDiffieHellmanGroupExchangeSha256)},
-                    {"diffie-hellman-group-exchange-sha1", typeof (KeyExchangeDiffieHellmanGroupExchangeSha1)},
-                    {"diffie-hellman-group14-sha1", typeof (KeyExchangeDiffieHellmanGroup14Sha1)},
-                    {"diffie-hellman-group1-sha1", typeof (KeyExchangeDiffieHellmanGroup1Sha1)},
-                    //{"ecdh-sha2-nistp256", typeof(KeyExchangeEllipticCurveDiffieHellman)},
-                    //{"ecdh-sha2-nistp256", typeof(...)},
-                    //{"ecdh-sha2-nistp384", typeof(...)},
-                    //{"ecdh-sha2-nistp521", typeof(...)},
-                    //"gss-group1-sha1-toWM5Slw5Ew8Mqkay+al2g==" - WinSSHD
-                    //"gss-gex-sha1-toWM5Slw5Ew8Mqkay+al2g==" - WinSSHD
-                };
-
-            Encryptions = new Dictionary<string, CipherInfo>
-                {
-                    {"aes256-ctr", new CipherInfo(256, (key, iv) => new AesCipher(key, new CtrCipherMode(iv), null))},
-                    {"3des-cbc", new CipherInfo(192, (key, iv) => new TripleDesCipher(key, new CbcCipherMode(iv), null))},
-                    {"aes128-cbc", new CipherInfo(128, (key, iv) => new AesCipher(key, new CbcCipherMode(iv), null))},
-                    {"aes192-cbc", new CipherInfo(192, (key, iv) => new AesCipher(key, new CbcCipherMode(iv), null))},
-                    {"aes256-cbc", new CipherInfo(256, (key, iv) => new AesCipher(key, new CbcCipherMode(iv), null))},
-                    {"blowfish-cbc", new CipherInfo(128, (key, iv) => new BlowfishCipher(key, new CbcCipherMode(iv), null))},
-                    {"twofish-cbc", new CipherInfo(256, (key, iv) => new TwofishCipher(key, new CbcCipherMode(iv), null))},
-                    {"twofish192-cbc", new CipherInfo(192, (key, iv) => new TwofishCipher(key, new CbcCipherMode(iv), null))},
-                    {"twofish128-cbc", new CipherInfo(128, (key, iv) => new TwofishCipher(key, new CbcCipherMode(iv), null))},
-                    {"twofish256-cbc", new CipherInfo(256, (key, iv) => new TwofishCipher(key, new CbcCipherMode(iv), null))},
-                    ////{"serpent256-cbc", typeof(CipherSerpent256CBC)},
-                    ////{"serpent192-cbc", typeof(...)},
-                    ////{"serpent128-cbc", typeof(...)},
-                    {"arcfour", new CipherInfo(128, (key, iv) => new Arc4Cipher(key, false))},
-                    {"arcfour128", new CipherInfo(128, (key, iv) => new Arc4Cipher(key, true))},
-                    {"arcfour256", new CipherInfo(256, (key, iv) => new Arc4Cipher(key, true))},
-                    ////{"idea-cbc", typeof(...)},
-                    {"cast128-cbc", new CipherInfo(128, (key, iv) => new CastCipher(key, new CbcCipherMode(iv), null))},
-                    ////{"rijndael-cbc@lysator.liu.se", typeof(...)},                
-                    {"aes128-ctr", new CipherInfo(128, (key, iv) => new AesCipher(key, new CtrCipherMode(iv), null))},
-                    {"aes192-ctr", new CipherInfo(192, (key, iv) => new AesCipher(key, new CtrCipherMode(iv), null))},
-                };
-
-            HmacAlgorithms = new Dictionary<string, HashInfo>
-                {
-                    {"hmac-md5", new HashInfo(16*8, CryptoAbstraction.CreateHMACMD5)},
-                    {"hmac-md5-96", new HashInfo(16*8, key => CryptoAbstraction.CreateHMACMD5(key, 96))},
-                    {"hmac-sha1", new HashInfo(20*8, CryptoAbstraction.CreateHMACSHA1)},
-                    {"hmac-sha1-96", new HashInfo(20*8, key => CryptoAbstraction.CreateHMACSHA1(key, 96))},
-                    {"hmac-sha2-256", new HashInfo(32*8, CryptoAbstraction.CreateHMACSHA256)},
-                    {"hmac-sha2-256-96", new HashInfo(32*8, key => CryptoAbstraction.CreateHMACSHA256(key, 96))},
-                    {"hmac-sha2-512", new HashInfo(64 * 8, CryptoAbstraction.CreateHMACSHA512)},
-                    {"hmac-sha2-512-96", new HashInfo(64 * 8,  key => CryptoAbstraction.CreateHMACSHA512(key, 96))},
-                };
-
-            HostKeyAlgorithms = new Dictionary<string, Func<byte[], KeyHostAlgorithm>>
-                {
-                    {"ssh-rsa", data => new KeyHostAlgorithm("ssh-rsa", new RsaKey(), data)},
-                    {"ssh-dss", data => new KeyHostAlgorithm("ssh-dss", new DsaKey(), data)},
-                    //{"ecdsa-sha2-nistp256 "}
-                    //{"x509v3-sign-rsa", () => { ... },
-                    //{"x509v3-sign-dss", () => { ... },
-                    //{"spki-sign-rsa", () => { ... },
-                    //{"spki-sign-dss", () => { ... },
-                    //{"pgp-sign-rsa", () => { ... },
-                    //{"pgp-sign-dss", () => { ... },
-                };
-
-            CompressionAlgorithms = new Dictionary<string, Type>
-                {
-                    //{"zlib@openssh.com", typeof(ZlibOpenSsh)}, 
-                    //{"zlib", typeof(Zlib)}, 
-                    {"none", null},
-                };
-
-            ChannelRequests = new Dictionary<string, RequestInfo>
-                {
-                    {EnvironmentVariableRequestInfo.Name, new EnvironmentVariableRequestInfo()},
-                    {ExecRequestInfo.Name, new ExecRequestInfo()},
-                    {ExitSignalRequestInfo.Name, new ExitSignalRequestInfo()},
-                    {ExitStatusRequestInfo.Name, new ExitStatusRequestInfo()},
-                    {PseudoTerminalRequestInfo.Name, new PseudoTerminalRequestInfo()},
-                    {ShellRequestInfo.Name, new ShellRequestInfo()},
-                    {SignalRequestInfo.Name, new SignalRequestInfo()},
-                    {SubsystemRequestInfo.Name, new SubsystemRequestInfo()},
-                    {WindowChangeRequestInfo.Name, new WindowChangeRequestInfo()},
-                    {X11ForwardingRequestInfo.Name, new X11ForwardingRequestInfo()},
-                    {XonXoffRequestInfo.Name, new XonXoffRequestInfo()},
-                    {EndOfWriteRequestInfo.Name, new EndOfWriteRequestInfo()},
-                    {KeepAliveRequestInfo.Name, new KeepAliveRequestInfo()},
-                };
-
-            Host = host;
-            Port = port;
-            Username = username;
-
-            ProxyType = proxyType;
-            ProxyHost = proxyHost;
-            ProxyPort = proxyPort;
-            ProxyUsername = proxyUsername;
-            ProxyPassword = proxyPassword;
-
-            AuthenticationMethods = authenticationMethods;
-        }
-
-        /// <summary>
-        /// Authenticates the specified session.
-        /// </summary>
-        /// <param name="session">The session to be authenticated.</param>
-        /// <param name="serviceFactory">The factory to use for creating new services.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="session"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="serviceFactory"/> is <c>null</c>.</exception>
-        /// <exception cref="SshAuthenticationException">No suitable authentication method found to complete authentication, or permission denied.</exception>
-        internal void Authenticate(ISession session, IServiceFactory serviceFactory)
-        {
-            if (serviceFactory == null)
-                throw new ArgumentNullException("serviceFactory");
-
-            IsAuthenticated = false;
-            var clientAuthentication = serviceFactory.CreateClientAuthentication();
-            clientAuthentication.Authenticate(this, session);
-            IsAuthenticated = true;
-        }
-
-        /// <summary>
-        /// Signals that an authentication banner message was received from the server.
-        /// </summary>
-        /// <param name="sender">The session in which the banner message was received.</param>
-        /// <param name="e">The banner message.{</param>
-        void IConnectionInfoInternal.UserAuthenticationBannerReceived(object sender, MessageEventArgs<BannerMessage> e)
-        {
-            var authenticationBanner = AuthenticationBanner;
-            if (authenticationBanner != null)
-            {
-                authenticationBanner(this,
-                    new AuthenticationBannerEventArgs(Username, e.Message.Message, e.Message.Language));
-            }
-        }
-
-        IAuthenticationMethod IConnectionInfoInternal.CreateNoneAuthenticationMethod()
-        {
-            return new NoneAuthenticationMethod(Username);
-        }
-
-        IList<IAuthenticationMethod> IConnectionInfoInternal.AuthenticationMethods
-        {
-            get { return AuthenticationMethods.Cast<IAuthenticationMethod>().ToList(); }
-        }
     }
+
+    public ConnectionInfo(
+      string host,
+      int port,
+      string username,
+      params AuthenticationMethod[] authenticationMethods)
+      : this(host, port, username, ProxyTypes.None, (string) null, 0, (string) null, (string) null, authenticationMethods)
+    {
+    }
+
+    public ConnectionInfo(
+      string host,
+      int port,
+      string username,
+      ProxyTypes proxyType,
+      string proxyHost,
+      int proxyPort,
+      string proxyUsername,
+      string proxyPassword,
+      params AuthenticationMethod[] authenticationMethods)
+    {
+      if (host == null)
+        throw new ArgumentNullException(nameof (host));
+      port.ValidatePort(nameof (port));
+      if (username == null)
+        throw new ArgumentNullException(nameof (username));
+      if (username.All<char>(new Func<char, bool>(char.IsWhiteSpace)))
+        throw new ArgumentException("Cannot be empty or contain only whitespace.", nameof (username));
+      if (proxyType != 0)
+      {
+        if (proxyHost == null)
+          throw new ArgumentNullException(nameof (proxyHost));
+        proxyPort.ValidatePort(nameof (proxyPort));
+      }
+      if (authenticationMethods == null)
+        throw new ArgumentNullException(nameof (authenticationMethods));
+      if (authenticationMethods.Length == 0)
+        throw new ArgumentException("At least one authentication method should be specified.", nameof (authenticationMethods));
+      this.Timeout = ConnectionInfo.DefaultTimeout;
+      this.ChannelCloseTimeout = ConnectionInfo.DefaultChannelCloseTimeout;
+      this.RetryAttempts = 10;
+      this.MaxSessions = 10;
+      this.Encoding = Encoding.UTF8;
+      this.KeyExchangeAlgorithms = (IDictionary<string, Type>) new Dictionary<string, Type>()
+      {
+        {
+          "diffie-hellman-group-exchange-sha256",
+          typeof (KeyExchangeDiffieHellmanGroupExchangeSha256)
+        },
+        {
+          "diffie-hellman-group-exchange-sha1",
+          typeof (KeyExchangeDiffieHellmanGroupExchangeSha1)
+        },
+        {
+          "diffie-hellman-group14-sha1",
+          typeof (KeyExchangeDiffieHellmanGroup14Sha1)
+        },
+        {
+          "diffie-hellman-group1-sha1",
+          typeof (KeyExchangeDiffieHellmanGroup1Sha1)
+        }
+      };
+      this.Encryptions = (IDictionary<string, CipherInfo>) new Dictionary<string, CipherInfo>()
+      {
+        {
+          "aes256-ctr",
+          new CipherInfo(256, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new AesCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CtrCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "3des-cbc",
+          new CipherInfo(192, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new TripleDesCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "aes128-cbc",
+          new CipherInfo(128, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new AesCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "aes192-cbc",
+          new CipherInfo(192, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new AesCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "aes256-cbc",
+          new CipherInfo(256, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new AesCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "blowfish-cbc",
+          new CipherInfo(128, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new BlowfishCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "twofish-cbc",
+          new CipherInfo(256, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new TwofishCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "twofish192-cbc",
+          new CipherInfo(192, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new TwofishCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "twofish128-cbc",
+          new CipherInfo(128, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new TwofishCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "twofish256-cbc",
+          new CipherInfo(256, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new TwofishCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "arcfour",
+          new CipherInfo(128, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new Arc4Cipher(key, false)))
+        },
+        {
+          "arcfour128",
+          new CipherInfo(128, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new Arc4Cipher(key, true)))
+        },
+        {
+          "arcfour256",
+          new CipherInfo(256, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new Arc4Cipher(key, true)))
+        },
+        {
+          "cast128-cbc",
+          new CipherInfo(128, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new CastCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CbcCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "aes128-ctr",
+          new CipherInfo(128, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new AesCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CtrCipherMode(iv), (CipherPadding) null)))
+        },
+        {
+          "aes192-ctr",
+          new CipherInfo(192, (Func<byte[], byte[], Cipher>) ((key, iv) => (Cipher) new AesCipher(key, (Renci.SshNet.Security.Cryptography.Ciphers.CipherMode) new CtrCipherMode(iv), (CipherPadding) null)))
+        }
+      };
+      this.HmacAlgorithms = (IDictionary<string, HashInfo>) new Dictionary<string, HashInfo>()
+      {
+        {
+          "hmac-md5",
+          new HashInfo(128, new Func<byte[], HashAlgorithm>(CryptoAbstraction.CreateHMACMD5))
+        },
+        {
+          "hmac-md5-96",
+          new HashInfo(128, (Func<byte[], HashAlgorithm>) (key => (HashAlgorithm) CryptoAbstraction.CreateHMACMD5(key, 96)))
+        },
+        {
+          "hmac-sha1",
+          new HashInfo(160, new Func<byte[], HashAlgorithm>(CryptoAbstraction.CreateHMACSHA1))
+        },
+        {
+          "hmac-sha1-96",
+          new HashInfo(160, (Func<byte[], HashAlgorithm>) (key => (HashAlgorithm) CryptoAbstraction.CreateHMACSHA1(key, 96)))
+        },
+        {
+          "hmac-sha2-256",
+          new HashInfo(256, new Func<byte[], HashAlgorithm>(CryptoAbstraction.CreateHMACSHA256))
+        },
+        {
+          "hmac-sha2-256-96",
+          new HashInfo(256, (Func<byte[], HashAlgorithm>) (key => (HashAlgorithm) CryptoAbstraction.CreateHMACSHA256(key, 96)))
+        },
+        {
+          "hmac-sha2-512",
+          new HashInfo(512, new Func<byte[], HashAlgorithm>(CryptoAbstraction.CreateHMACSHA512))
+        },
+        {
+          "hmac-sha2-512-96",
+          new HashInfo(512, (Func<byte[], HashAlgorithm>) (key => (HashAlgorithm) CryptoAbstraction.CreateHMACSHA512(key, 96)))
+        }
+      };
+      this.HostKeyAlgorithms = (IDictionary<string, Func<byte[], KeyHostAlgorithm>>) new Dictionary<string, Func<byte[], KeyHostAlgorithm>>()
+      {
+        {
+          "ssh-rsa",
+          (Func<byte[], KeyHostAlgorithm>) (data => new KeyHostAlgorithm("ssh-rsa", (Key) new RsaKey(), data))
+        },
+        {
+          "ssh-dss",
+          (Func<byte[], KeyHostAlgorithm>) (data => new KeyHostAlgorithm("ssh-dss", (Key) new DsaKey(), data))
+        }
+      };
+      this.CompressionAlgorithms = (IDictionary<string, Type>) new Dictionary<string, Type>()
+      {
+        {
+          "none",
+          (Type) null
+        }
+      };
+      this.ChannelRequests = (IDictionary<string, RequestInfo>) new Dictionary<string, RequestInfo>()
+      {
+        {
+          "env",
+          (RequestInfo) new EnvironmentVariableRequestInfo()
+        },
+        {
+          "exec",
+          (RequestInfo) new ExecRequestInfo()
+        },
+        {
+          "exit-signal",
+          (RequestInfo) new ExitSignalRequestInfo()
+        },
+        {
+          "exit-status",
+          (RequestInfo) new ExitStatusRequestInfo()
+        },
+        {
+          "pty-req",
+          (RequestInfo) new PseudoTerminalRequestInfo()
+        },
+        {
+          "shell",
+          (RequestInfo) new ShellRequestInfo()
+        },
+        {
+          "signal",
+          (RequestInfo) new SignalRequestInfo()
+        },
+        {
+          "subsystem",
+          (RequestInfo) new SubsystemRequestInfo()
+        },
+        {
+          "window-change",
+          (RequestInfo) new WindowChangeRequestInfo()
+        },
+        {
+          "x11-req",
+          (RequestInfo) new X11ForwardingRequestInfo()
+        },
+        {
+          "xon-xoff",
+          (RequestInfo) new XonXoffRequestInfo()
+        },
+        {
+          "eow@openssh.com",
+          (RequestInfo) new EndOfWriteRequestInfo()
+        },
+        {
+          "keepalive@openssh.com",
+          (RequestInfo) new KeepAliveRequestInfo()
+        }
+      };
+      this.Host = host;
+      this.Port = port;
+      this.Username = username;
+      this.ProxyType = proxyType;
+      this.ProxyHost = proxyHost;
+      this.ProxyPort = proxyPort;
+      this.ProxyUsername = proxyUsername;
+      this.ProxyPassword = proxyPassword;
+      this.AuthenticationMethods = (IList<AuthenticationMethod>) authenticationMethods;
+    }
+
+    internal void Authenticate(ISession session, IServiceFactory serviceFactory)
+    {
+      if (serviceFactory == null)
+        throw new ArgumentNullException(nameof (serviceFactory));
+      this.IsAuthenticated = false;
+      serviceFactory.CreateClientAuthentication().Authenticate((IConnectionInfoInternal) this, session);
+      this.IsAuthenticated = true;
+    }
+
+    void IConnectionInfoInternal.UserAuthenticationBannerReceived(
+      object sender,
+      MessageEventArgs<BannerMessage> e)
+    {
+      EventHandler<AuthenticationBannerEventArgs> authenticationBanner = this.AuthenticationBanner;
+      if (authenticationBanner == null)
+        return;
+      authenticationBanner((object) this, new AuthenticationBannerEventArgs(this.Username, e.Message.Message, e.Message.Language));
+    }
+
+    IAuthenticationMethod IConnectionInfoInternal.CreateNoneAuthenticationMethod() => (IAuthenticationMethod) new NoneAuthenticationMethod(this.Username);
+
+    IList<IAuthenticationMethod> IConnectionInfoInternal.AuthenticationMethods => (IList<IAuthenticationMethod>) this.AuthenticationMethods.Cast<IAuthenticationMethod>().ToList<IAuthenticationMethod>();
+  }
 }

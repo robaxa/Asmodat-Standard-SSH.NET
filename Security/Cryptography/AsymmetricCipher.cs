@@ -1,19 +1,13 @@
-﻿namespace Renci.SshNet.Security.Cryptography
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.Cryptography.AsymmetricCipher
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+namespace Renci.SshNet.Security.Cryptography
 {
-    /// <summary>
-    /// Base class for asymmetric cipher implementations.
-    /// </summary>
-    public abstract class AsymmetricCipher  : Cipher
-    {
-        /// <summary>
-        /// Gets the minimum data size.
-        /// </summary>
-        /// <value>
-        /// The minimum data size.
-        /// </value>
-        public override byte MinimumSize
-        {
-            get { return 0; }
-        }
-    }
+  public abstract class AsymmetricCipher : Cipher
+  {
+    public override byte MinimumSize => 0;
+  }
 }

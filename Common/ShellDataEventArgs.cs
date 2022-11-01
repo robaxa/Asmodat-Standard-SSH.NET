@@ -1,38 +1,21 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Common.ShellDataEventArgs
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Common
 {
-    /// <summary>
-    /// Provides data for Shell DataReceived event
-    /// </summary>
-    public class ShellDataEventArgs : EventArgs
-    {
-        /// <summary>
-        /// Gets the data.
-        /// </summary>
-        public byte[] Data { get; private set; }
+  public class ShellDataEventArgs : EventArgs
+  {
+    public byte[] Data { get; private set; }
 
-        /// <summary>
-        /// Gets the line data.
-        /// </summary>
-        public string Line { get; private set; }
+    public string Line { get; private set; }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ShellDataEventArgs"/> class.
-        /// </summary>
-        /// <param name="data">The data.</param>
-        public ShellDataEventArgs(byte[] data)
-        {
-            Data = data;
-        }
+    public ShellDataEventArgs(byte[] data) => this.Data = data;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ShellDataEventArgs"/> class.
-        /// </summary>
-        /// <param name="line">The line.</param>
-        public ShellDataEventArgs(string line)
-        {
-            Line = line;
-        }
-    }
+    public ShellDataEventArgs(string line) => this.Line = line;
+  }
 }

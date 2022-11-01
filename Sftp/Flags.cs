@@ -1,34 +1,22 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Sftp.Flags
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
+using System;
 
 namespace Renci.SshNet.Sftp
 {
-    [Flags]
-    internal enum Flags
-    {
-        None = 0x00000000,
-        /// <summary>
-        /// SSH_FXF_READ
-        /// </summary>
-        Read = 0x00000001,
-        /// <summary>
-        /// SSH_FXF_WRITE
-        /// </summary>
-        Write = 0x00000002,
-        /// <summary>
-        /// SSH_FXF_APPEND
-        /// </summary>
-        Append = 0x00000004,
-        /// <summary>
-        /// SSH_FXF_CREAT
-        /// </summary>
-        CreateNewOrOpen = 0x00000008,
-        /// <summary>
-        /// SSH_FXF_TRUNC
-        /// </summary>
-        Truncate = 0x00000010,
-        /// <summary>
-        /// SSH_FXF_EXCL
-        /// </summary>
-        CreateNew = 0x00000028
-    }
+  [Flags]
+  internal enum Flags
+  {
+    None = 0,
+    Read = 1,
+    Write = 2,
+    Append = 4,
+    CreateNewOrOpen = 8,
+    Truncate = 16, // 0x00000010
+    CreateNew = 40, // 0x00000028
+  }
 }

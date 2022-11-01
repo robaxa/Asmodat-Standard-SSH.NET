@@ -1,84 +1,57 @@
-﻿using System;
-using System.Security.Cryptography;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.Security.Cryptography.RsaDigitalSignature
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Abstractions;
 using Renci.SshNet.Common;
 using Renci.SshNet.Security.Cryptography.Ciphers;
+using System;
+using System.Security.Cryptography;
 
 namespace Renci.SshNet.Security.Cryptography
 {
-    /// <summary>
-    /// Implements RSA digital signature algorithm.
-    /// </summary>
-    public class RsaDigitalSignature : CipherDigitalSignature, IDisposable
+  public class RsaDigitalSignature : CipherDigitalSignature, IDisposable
+  {
+    private HashAlgorithm _hash;
+    private bool _isDisposed;
+
+    public RsaDigitalSignature(RsaKey rsaKey)
+      : base(new ObjectIdentifier(new ulong[6]
+      {
+        1UL,
+        3UL,
+        14UL,
+        3UL,
+        2UL,
+        26UL
+      }), (AsymmetricCipher) new RsaCipher(rsaKey))
     {
-        private HashAlgorithm _hash;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RsaDigitalSignature"/> class.
-        /// </summary>
-        /// <param name="rsaKey">The RSA key.</param>
-        public RsaDigitalSignature(RsaKey rsaKey)
-            : base(new ObjectIdentifier(1, 3, 14, 3, 2, 26), new RsaCipher(rsaKey))
-        {
-            _hash = CryptoAbstraction.CreateSHA1();
-        }
-
-        /// <summary>
-        /// Hashes the specified input.
-        /// </summary>
-        /// <param name="input">The input.</param>
-        /// <returns>
-        /// Hashed data.
-        /// </returns>
-        protected override byte[] Hash(byte[] input)
-        {
-            return _hash.ComputeHash(input);
-        }
-
-        #region IDisposable Members
-
-        private bool _isDisposed;
-
-        /// <summary>
-        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Releases unmanaged and - optionally - managed resources
-        /// </summary>
-        /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (_isDisposed)
-                return;
-
-            if (disposing)
-            {
-                var hash = _hash;
-                if (hash != null)
-                {
-                    hash.Dispose();
-                    _hash = null;
-                }
-
-                _isDisposed = true;
-            }
-        }
-
-        /// <summary>
-        /// Releases unmanaged resources and performs other cleanup operations before the
-        /// <see cref="RsaDigitalSignature"/> is reclaimed by garbage collection.
-        /// </summary>
-        ~RsaDigitalSignature()
-        {
-            Dispose(false);
-        }
-
-        #endregion
+      this._hash = (HashAlgorithm) CryptoAbstraction.CreateSHA1();
     }
+
+    protected override byte[] Hash(byte[] input) => this._hash.ComputeHash(input);
+
+    public void Dispose()
+    {
+      this.Dispose(true);
+      GC.SuppressFinalize((object) this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+      if (this._isDisposed || !disposing)
+        return;
+      HashAlgorithm hash = this._hash;
+      if (hash != null)
+      {
+        hash.Dispose();
+        this._hash = (HashAlgorithm) null;
+      }
+      this._isDisposed = true;
+    }
+
+    ~RsaDigitalSignature() => this.Dispose(false);
+  }
 }

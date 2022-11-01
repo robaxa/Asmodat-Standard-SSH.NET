@@ -1,260 +1,198 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.SshMessageFactory
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Common;
 using Renci.SshNet.Messages;
 using Renci.SshNet.Messages.Authentication;
 using Renci.SshNet.Messages.Connection;
 using Renci.SshNet.Messages.Transport;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
 
 namespace Renci.SshNet
 {
-    internal class SshMessageFactory
+  internal class SshMessageFactory
+  {
+    private readonly SshMessageFactory.MessageMetadata[] _enabledMessagesByNumber;
+    private readonly bool[] _activatedMessagesById;
+    internal static readonly SshMessageFactory.MessageMetadata[] AllMessages = new SshMessageFactory.MessageMetadata[31]
     {
-        private readonly MessageMetadata[] _enabledMessagesByNumber;
-        private readonly bool[] _activatedMessagesById;
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<KeyExchangeInitMessage>((byte) 0, "SSH_MSG_KEXINIT", (byte) 20),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<NewKeysMessage>((byte) 1, "SSH_MSG_NEWKEYS", (byte) 21),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<RequestFailureMessage>((byte) 2, "SSH_MSG_REQUEST_FAILURE", (byte) 82),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelOpenFailureMessage>((byte) 3, "SSH_MSG_CHANNEL_OPEN_FAILURE", (byte) 92),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelFailureMessage>((byte) 4, "SSH_MSG_CHANNEL_FAILURE", (byte) 100),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelExtendedDataMessage>((byte) 5, "SSH_MSG_CHANNEL_EXTENDED_DATA", (byte) 95),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelDataMessage>((byte) 6, "SSH_MSG_CHANNEL_DATA", (byte) 94),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelRequestMessage>((byte) 7, "SSH_MSG_CHANNEL_REQUEST", (byte) 98),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<BannerMessage>((byte) 8, "SSH_MSG_USERAUTH_BANNER", (byte) 53),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<InformationResponseMessage>((byte) 9, "SSH_MSG_USERAUTH_INFO_RESPONSE", (byte) 61),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<FailureMessage>((byte) 10, "SSH_MSG_USERAUTH_FAILURE", (byte) 51),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<DebugMessage>((byte) 11, "SSH_MSG_DEBUG", (byte) 4),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<GlobalRequestMessage>((byte) 12, "SSH_MSG_GLOBAL_REQUEST", (byte) 80),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelOpenMessage>((byte) 13, "SSH_MSG_CHANNEL_OPEN", (byte) 90),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelOpenConfirmationMessage>((byte) 14, "SSH_MSG_CHANNEL_OPEN_CONFIRMATION", (byte) 91),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<InformationRequestMessage>((byte) 15, "SSH_MSG_USERAUTH_INFO_REQUEST", (byte) 60),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<UnimplementedMessage>((byte) 16, "SSH_MSG_UNIMPLEMENTED", (byte) 3),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<RequestSuccessMessage>((byte) 17, "SSH_MSG_REQUEST_SUCCESS", (byte) 81),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelSuccessMessage>((byte) 18, "SSH_MSG_CHANNEL_SUCCESS", (byte) 99),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<PasswordChangeRequiredMessage>((byte) 19, "SSH_MSG_USERAUTH_PASSWD_CHANGEREQ", (byte) 60),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<DisconnectMessage>((byte) 20, "SSH_MSG_DISCONNECT", (byte) 1),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<SuccessMessage>((byte) 21, "SSH_MSG_USERAUTH_SUCCESS", (byte) 52),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<PublicKeyMessage>((byte) 22, "SSH_MSG_USERAUTH_PK_OK", (byte) 60),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<IgnoreMessage>((byte) 23, "SSH_MSG_IGNORE", (byte) 2),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelWindowAdjustMessage>((byte) 24, "SSH_MSG_CHANNEL_WINDOW_ADJUST", (byte) 93),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelEofMessage>((byte) 25, "SSH_MSG_CHANNEL_EOF", (byte) 96),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ChannelCloseMessage>((byte) 26, "SSH_MSG_CHANNEL_CLOSE", (byte) 97),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<ServiceAcceptMessage>((byte) 27, "SSH_MSG_SERVICE_ACCEPT", (byte) 6),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<KeyExchangeDhGroupExchangeGroup>((byte) 28, "SSH_MSG_KEX_DH_GEX_GROUP", (byte) 31),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<KeyExchangeDhReplyMessage>((byte) 29, "SSH_MSG_KEXDH_REPLY", (byte) 31),
+      (SshMessageFactory.MessageMetadata) new SshMessageFactory.MessageMetadata<KeyExchangeDhGroupExchangeReply>((byte) 30, "SSH_MSG_KEX_DH_GEX_REPLY", (byte) 33)
+    };
+    private static readonly IDictionary<string, SshMessageFactory.MessageMetadata> MessagesByName = (IDictionary<string, SshMessageFactory.MessageMetadata>) new Dictionary<string, SshMessageFactory.MessageMetadata>(SshMessageFactory.AllMessages.Length);
+    internal const byte HighestMessageNumber = 100;
+    internal const int TotalMessageCount = 31;
 
-        internal static readonly MessageMetadata[] AllMessages;
-        private static readonly IDictionary<string, MessageMetadata> MessagesByName;
-
-        /// <summary>
-        /// Defines the highest message number that is currently supported.
-        /// </summary>
-        internal const byte HighestMessageNumber = 100;
-
-        /// <summary>
-        /// Defines the total number of supported messages.
-        /// </summary>
-        internal const int TotalMessageCount = 31;
-
-        static SshMessageFactory()
-        {
-            AllMessages = new MessageMetadata[]
-            {
-                new MessageMetadata<KeyExchangeInitMessage>(0, "SSH_MSG_KEXINIT", 20),
-                new MessageMetadata<NewKeysMessage> (1, "SSH_MSG_NEWKEYS", 21),
-                new MessageMetadata<RequestFailureMessage> (2, "SSH_MSG_REQUEST_FAILURE", 82),
-                new MessageMetadata<ChannelOpenFailureMessage> (3, "SSH_MSG_CHANNEL_OPEN_FAILURE", 92),
-                new MessageMetadata<ChannelFailureMessage> (4, "SSH_MSG_CHANNEL_FAILURE", 100),
-                new MessageMetadata<ChannelExtendedDataMessage> (5, "SSH_MSG_CHANNEL_EXTENDED_DATA", 95),
-                new MessageMetadata<ChannelDataMessage> (6, "SSH_MSG_CHANNEL_DATA", 94),
-                new MessageMetadata<ChannelRequestMessage> (7, "SSH_MSG_CHANNEL_REQUEST", 98),
-                new MessageMetadata<BannerMessage> (8, "SSH_MSG_USERAUTH_BANNER", 53),
-                new MessageMetadata<InformationResponseMessage> (9, "SSH_MSG_USERAUTH_INFO_RESPONSE", 61),
-                new MessageMetadata<FailureMessage> (10, "SSH_MSG_USERAUTH_FAILURE", 51),
-                new MessageMetadata<DebugMessage> (11, "SSH_MSG_DEBUG", 4),
-                new MessageMetadata<GlobalRequestMessage> (12, "SSH_MSG_GLOBAL_REQUEST", 80),
-                new MessageMetadata<ChannelOpenMessage> (13, "SSH_MSG_CHANNEL_OPEN", 90),
-                new MessageMetadata<ChannelOpenConfirmationMessage> (14, "SSH_MSG_CHANNEL_OPEN_CONFIRMATION", 91),
-                new MessageMetadata<InformationRequestMessage> (15, "SSH_MSG_USERAUTH_INFO_REQUEST", 60),
-                new MessageMetadata<UnimplementedMessage> (16, "SSH_MSG_UNIMPLEMENTED", 3),
-                new MessageMetadata<RequestSuccessMessage> (17, "SSH_MSG_REQUEST_SUCCESS", 81),
-                new MessageMetadata<ChannelSuccessMessage> (18, "SSH_MSG_CHANNEL_SUCCESS", 99),
-                new MessageMetadata<PasswordChangeRequiredMessage> (19, "SSH_MSG_USERAUTH_PASSWD_CHANGEREQ", 60),
-                new MessageMetadata<DisconnectMessage> (20, "SSH_MSG_DISCONNECT", 1),
-                new MessageMetadata<SuccessMessage> (21, "SSH_MSG_USERAUTH_SUCCESS", 52),
-                new MessageMetadata<PublicKeyMessage> (22, "SSH_MSG_USERAUTH_PK_OK", 60),
-                new MessageMetadata<IgnoreMessage> (23, "SSH_MSG_IGNORE", 2),
-                new MessageMetadata<ChannelWindowAdjustMessage> (24, "SSH_MSG_CHANNEL_WINDOW_ADJUST", 93),
-                new MessageMetadata<ChannelEofMessage> (25, "SSH_MSG_CHANNEL_EOF", 96),
-                new MessageMetadata<ChannelCloseMessage> (26, "SSH_MSG_CHANNEL_CLOSE", 97),
-                new MessageMetadata<ServiceAcceptMessage> (27, "SSH_MSG_SERVICE_ACCEPT", 6),
-                new MessageMetadata<KeyExchangeDhGroupExchangeGroup> (28, "SSH_MSG_KEX_DH_GEX_GROUP", 31),
-                new MessageMetadata<KeyExchangeDhReplyMessage> (29, "SSH_MSG_KEXDH_REPLY", 31),
-                new MessageMetadata<KeyExchangeDhGroupExchangeReply> (30, "SSH_MSG_KEX_DH_GEX_REPLY", 33)
-            };
-
-            MessagesByName = new Dictionary<string, MessageMetadata>(AllMessages.Length);
-            for (var i = 0; i < AllMessages.Length; i++)
-            {
-                var messageMetadata = AllMessages[i];
-                MessagesByName.Add(messageMetadata.Name, messageMetadata);
-            }
-        }
-
-        public SshMessageFactory()
-        {
-            _activatedMessagesById = new bool[TotalMessageCount];
-            _enabledMessagesByNumber = new MessageMetadata[HighestMessageNumber + 1];
-        }
-
-        /// <summary>
-        /// Disables and deactivate all messages.
-        /// </summary>
-        public void Reset()
-        {
-            Array.Clear(_activatedMessagesById, 0, _activatedMessagesById.Length);
-            Array.Clear(_enabledMessagesByNumber, 0, _enabledMessagesByNumber.Length);
-        }
-
-        public Message Create(byte messageNumber)
-        {
-            if (messageNumber > HighestMessageNumber)
-            {
-                throw CreateMessageTypeNotSupportedException(messageNumber);
-            }
-
-            var enabledMessageMetadata = _enabledMessagesByNumber[messageNumber];
-            if (enabledMessageMetadata == null)
-            {
-                MessageMetadata definedMessageMetadata = null;
-
-                // find first message with specified number
-                for (var i = 0; i < AllMessages.Length; i++)
-                {
-                    var messageMetadata = AllMessages[i];
-                    if (messageMetadata.Number == messageNumber)
-                    {
-                        definedMessageMetadata = messageMetadata;
-                        break;
-                    }
-                }
-
-                if (definedMessageMetadata == null)
-                {
-                    throw CreateMessageTypeNotSupportedException(messageNumber);
-                }
-
-                throw new SshException(string.Format(CultureInfo.InvariantCulture, "Message type {0} is not valid in the current context.", messageNumber));
-            }
-
-            return enabledMessageMetadata.Create();
-        }
-
-        public void DisableNonKeyExchangeMessages()
-        {
-            for (var i = 0; i < AllMessages.Length; i++)
-            {
-                var messageMetadata = AllMessages[i];
-
-                var messageNumber = messageMetadata.Number;
-                if ((messageNumber > 2 && messageNumber < 20) || messageNumber > 30)
-                {
-                    _enabledMessagesByNumber[messageNumber] = null;
-                }
-            }
-        }
-
-        public void EnableActivatedMessages()
-        {
-            for (var i = 0; i < AllMessages.Length; i++)
-            {
-                var messageMetadata = AllMessages[i];
-
-                if (!_activatedMessagesById[messageMetadata.Id])
-                    continue;
-
-                var enabledMessageMetadata = _enabledMessagesByNumber[messageMetadata.Number];
-                if (enabledMessageMetadata != null && enabledMessageMetadata != messageMetadata)
-                {
-                    throw CreateMessageTypeAlreadyEnabledForOtherMessageException(messageMetadata.Number,
-                        messageMetadata.Name,
-                        enabledMessageMetadata.Name);
-                }
-                _enabledMessagesByNumber[messageMetadata.Number] = messageMetadata;
-            }
-        }
-
-        public void EnableAndActivateMessage(string messageName)
-        {
-            if (messageName == null)
-                throw new ArgumentNullException("messageName");
-
-            lock (this)
-            {
-                MessageMetadata messageMetadata;
-
-                if (!MessagesByName.TryGetValue(messageName, out messageMetadata))
-                {
-                    throw CreateMessageNotSupportedException(messageName);
-                }
-
-                var enabledMessageMetadata = _enabledMessagesByNumber[messageMetadata.Number];
-                if (enabledMessageMetadata != null && enabledMessageMetadata != messageMetadata)
-                {
-                    throw CreateMessageTypeAlreadyEnabledForOtherMessageException(messageMetadata.Number,
-                        messageMetadata.Name,
-                        enabledMessageMetadata.Name);
-                }
-
-                _enabledMessagesByNumber[messageMetadata.Number] = messageMetadata;
-                _activatedMessagesById[messageMetadata.Id] = true;
-            }
-        }
-
-        public void DisableAndDeactivateMessage(string messageName)
-        {
-            if (messageName == null)
-                throw new ArgumentNullException("messageName");
-
-            lock (this)
-            {
-                MessageMetadata messageMetadata;
-
-                if (!MessagesByName.TryGetValue(messageName, out messageMetadata))
-                {
-                    throw CreateMessageNotSupportedException(messageName);
-                }
-
-                var enabledMessageMetadata = _enabledMessagesByNumber[messageMetadata.Number];
-                if (enabledMessageMetadata != null && enabledMessageMetadata != messageMetadata)
-                {
-                    throw CreateMessageTypeAlreadyEnabledForOtherMessageException(messageMetadata.Number,
-                        messageMetadata.Name,
-                        enabledMessageMetadata.Name);
-                }
-
-                _activatedMessagesById[messageMetadata.Id] = false;
-                _enabledMessagesByNumber[messageMetadata.Number] = null;
-            }
-        }
-
-        private static SshException CreateMessageTypeNotSupportedException(byte messageNumber)
-        {
-            throw new SshException(string.Format(CultureInfo.InvariantCulture, "Message type {0} is not supported.", messageNumber));
-        }
-
-        private static SshException CreateMessageNotSupportedException(string messageName)
-        {
-            throw new SshException(string.Format(CultureInfo.InvariantCulture, "Message '{0}' is not supported.", messageName));
-        }
-
-        private static SshException CreateMessageTypeAlreadyEnabledForOtherMessageException(byte messageNumber, string messageName, string currentEnabledForMessageName)
-        {
-            throw new SshException(string.Format(CultureInfo.InvariantCulture,
-                "Cannot enable message '{0}'. Message type {1} is already enabled for '{2}'.",
-                messageName, messageNumber, currentEnabledForMessageName));
-        }
-
-        internal abstract class MessageMetadata
-        {
-            protected MessageMetadata(byte id, string name, byte number)
-            {
-                Id = id;
-                Name = name;
-                Number = number;
-            }
-
-            public readonly byte Id;
-
-            public readonly string Name;
-
-            public readonly byte Number;
-
-            public abstract Message Create();
-        }
-
-        internal class MessageMetadata<T> : MessageMetadata where T : Message, new()
-        {
-            public MessageMetadata(byte id, string name, byte number)
-                : base(id, name, number)
-            {
-            }
-
-            public override Message Create()
-            {
-                return new T();
-            }
-        }
+    static SshMessageFactory()
+    {
+      for (int index = 0; index < SshMessageFactory.AllMessages.Length; ++index)
+      {
+        SshMessageFactory.MessageMetadata allMessage = SshMessageFactory.AllMessages[index];
+        SshMessageFactory.MessagesByName.Add(allMessage.Name, allMessage);
+      }
     }
+
+    public SshMessageFactory()
+    {
+      this._activatedMessagesById = new bool[31];
+      this._enabledMessagesByNumber = new SshMessageFactory.MessageMetadata[101];
+    }
+
+    public void Reset()
+    {
+      Array.Clear((Array) this._activatedMessagesById, 0, this._activatedMessagesById.Length);
+      Array.Clear((Array) this._enabledMessagesByNumber, 0, this._enabledMessagesByNumber.Length);
+    }
+
+    public Message Create(byte messageNumber)
+    {
+      SshMessageFactory.MessageMetadata messageMetadata1 = messageNumber <= (byte) 100 ? this._enabledMessagesByNumber[(int) messageNumber] : throw SshMessageFactory.CreateMessageTypeNotSupportedException(messageNumber);
+      if (messageMetadata1 != null)
+        return messageMetadata1.Create();
+      SshMessageFactory.MessageMetadata messageMetadata2 = (SshMessageFactory.MessageMetadata) null;
+      for (int index = 0; index < SshMessageFactory.AllMessages.Length; ++index)
+      {
+        SshMessageFactory.MessageMetadata allMessage = SshMessageFactory.AllMessages[index];
+        if ((int) allMessage.Number == (int) messageNumber)
+        {
+          messageMetadata2 = allMessage;
+          break;
+        }
+      }
+      if (messageMetadata2 == null)
+        throw SshMessageFactory.CreateMessageTypeNotSupportedException(messageNumber);
+      throw new SshException(string.Format((IFormatProvider) CultureInfo.InvariantCulture, "Message type {0} is not valid in the current context.", (object) messageNumber));
+    }
+
+    public void DisableNonKeyExchangeMessages()
+    {
+      for (int index = 0; index < SshMessageFactory.AllMessages.Length; ++index)
+      {
+        byte number = SshMessageFactory.AllMessages[index].Number;
+        if (number > (byte) 2 && number < (byte) 20 || number > (byte) 30)
+          this._enabledMessagesByNumber[(int) number] = (SshMessageFactory.MessageMetadata) null;
+      }
+    }
+
+    public void EnableActivatedMessages()
+    {
+      for (int index = 0; index < SshMessageFactory.AllMessages.Length; ++index)
+      {
+        SshMessageFactory.MessageMetadata allMessage = SshMessageFactory.AllMessages[index];
+        if (this._activatedMessagesById[(int) allMessage.Id])
+        {
+          SshMessageFactory.MessageMetadata messageMetadata = this._enabledMessagesByNumber[(int) allMessage.Number];
+          this._enabledMessagesByNumber[(int) allMessage.Number] = messageMetadata == null || messageMetadata == allMessage ? allMessage : throw SshMessageFactory.CreateMessageTypeAlreadyEnabledForOtherMessageException(allMessage.Number, allMessage.Name, messageMetadata.Name);
+        }
+      }
+    }
+
+    public void EnableAndActivateMessage(string messageName)
+    {
+      if (messageName == null)
+        throw new ArgumentNullException(nameof (messageName));
+      lock (this)
+      {
+        SshMessageFactory.MessageMetadata messageMetadata1;
+        if (!SshMessageFactory.MessagesByName.TryGetValue(messageName, out messageMetadata1))
+          throw SshMessageFactory.CreateMessageNotSupportedException(messageName);
+        SshMessageFactory.MessageMetadata messageMetadata2 = this._enabledMessagesByNumber[(int) messageMetadata1.Number];
+        this._enabledMessagesByNumber[(int) messageMetadata1.Number] = messageMetadata2 == null || messageMetadata2 == messageMetadata1 ? messageMetadata1 : throw SshMessageFactory.CreateMessageTypeAlreadyEnabledForOtherMessageException(messageMetadata1.Number, messageMetadata1.Name, messageMetadata2.Name);
+        this._activatedMessagesById[(int) messageMetadata1.Id] = true;
+      }
+    }
+
+    public void DisableAndDeactivateMessage(string messageName)
+    {
+      if (messageName == null)
+        throw new ArgumentNullException(nameof (messageName));
+      lock (this)
+      {
+        SshMessageFactory.MessageMetadata messageMetadata1;
+        if (!SshMessageFactory.MessagesByName.TryGetValue(messageName, out messageMetadata1))
+          throw SshMessageFactory.CreateMessageNotSupportedException(messageName);
+        SshMessageFactory.MessageMetadata messageMetadata2 = this._enabledMessagesByNumber[(int) messageMetadata1.Number];
+        if (messageMetadata2 != null && messageMetadata2 != messageMetadata1)
+          throw SshMessageFactory.CreateMessageTypeAlreadyEnabledForOtherMessageException(messageMetadata1.Number, messageMetadata1.Name, messageMetadata2.Name);
+        this._activatedMessagesById[(int) messageMetadata1.Id] = false;
+        this._enabledMessagesByNumber[(int) messageMetadata1.Number] = (SshMessageFactory.MessageMetadata) null;
+      }
+    }
+
+    private static SshException CreateMessageTypeNotSupportedException(
+      byte messageNumber)
+    {
+      throw new SshException(string.Format((IFormatProvider) CultureInfo.InvariantCulture, "Message type {0} is not supported.", (object) messageNumber));
+    }
+
+    private static SshException CreateMessageNotSupportedException(string messageName) => throw new SshException(string.Format((IFormatProvider) CultureInfo.InvariantCulture, "Message '{0}' is not supported.", (object) messageName));
+
+    private static SshException CreateMessageTypeAlreadyEnabledForOtherMessageException(
+      byte messageNumber,
+      string messageName,
+      string currentEnabledForMessageName)
+    {
+      throw new SshException(string.Format((IFormatProvider) CultureInfo.InvariantCulture, "Cannot enable message '{0}'. Message type {1} is already enabled for '{2}'.", (object) messageName, (object) messageNumber, (object) currentEnabledForMessageName));
+    }
+
+    internal abstract class MessageMetadata
+    {
+      public readonly byte Id;
+      public readonly string Name;
+      public readonly byte Number;
+
+      protected MessageMetadata(byte id, string name, byte number)
+      {
+        this.Id = id;
+        this.Name = name;
+        this.Number = number;
+      }
+
+      public abstract Message Create();
+    }
+
+    internal class MessageMetadata<T> : SshMessageFactory.MessageMetadata where T : Message, new()
+    {
+      public MessageMetadata(byte id, string name, byte number)
+        : base(id, name, number)
+      {
+      }
+
+      public override Message Create() => (Message) new T();
+    }
+  }
 }

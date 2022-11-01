@@ -1,467 +1,459 @@
-﻿using System;
+﻿// Decompiled with JetBrains decompiler
+// Type: Renci.SshNet.ScpClient
+// Assembly: Asmodat Standard SSH.NET, Version=1.0.5.1, Culture=neutral, PublicKeyToken=null
+// MVID: 504BBE18-5FBE-4C0C-8018-79774B0EDD0B
+// Assembly location: C:\Users\ebacron\AppData\Local\Temp\Kuzebat\89eb444bc2\lib\net5.0\Asmodat Standard SSH.NET.dll
+
 using Renci.SshNet.Channels;
-using System.IO;
 using Renci.SshNet.Common;
-using System.Text.RegularExpressions;
-using System.Diagnostics.CodeAnalysis;
-using System.Net;
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.RegularExpressions;
 
 namespace Renci.SshNet
 {
-    /// <summary>
-    /// Provides SCP client functionality.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// More information on the SCP protocol is available here:
-    /// https://github.com/net-ssh/net-scp/blob/master/lib/net/scp.rb
-    /// </para>
-    /// <para>
-    /// Known issues in OpenSSH:
-    /// <list type="bullet">
-    ///   <item>
-    ///     <description>Recursive download (-prf) does not deal well with specific UTF-8 and newline characters.</description>
-    ///     <description>Recursive update does not support empty path for uploading to home directory.</description>
-    ///   </item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    public partial class ScpClient : BaseClient
+  public class ScpClient : BaseClient
+  {
+    private static readonly Regex FileInfoRe = new Regex("C(?<mode>\\d{4}) (?<length>\\d+) (?<filename>.+)");
+    private static readonly byte[] SuccessConfirmationCode = new byte[1];
+    private static readonly byte[] ErrorConfirmationCode = new byte[1]
     {
-        private static readonly Regex FileInfoRe = new Regex(@"C(?<mode>\d{4}) (?<length>\d+) (?<filename>.+)");
-        private static readonly byte[] SuccessConfirmationCode = {0};
-        private static readonly byte[] ErrorConfirmationCode = { 1 };
+      (byte) 1
+    };
+    private IRemotePathTransformation _remotePathTransformation;
+    private static readonly Regex DirectoryInfoRe = new Regex("D(?<mode>\\d{4}) (?<length>\\d+) (?<filename>.+)");
+    private static readonly Regex TimestampRe = new Regex("T(?<mtime>\\d+) 0 (?<atime>\\d+) 0");
 
-        private IRemotePathTransformation _remotePathTransformation;
+    public TimeSpan OperationTimeout { get; set; }
 
-        /// <summary>
-        /// Gets or sets the operation timeout.
-        /// </summary>
-        /// <value>
-        /// The timeout to wait until an operation completes. The default value is negative
-        /// one (-1) milliseconds, which indicates an infinite time-out period.
-        /// </value>
-        public TimeSpan OperationTimeout { get; set; }
+    public uint BufferSize { get; set; }
 
-        /// <summary>
-        /// Gets or sets the size of the buffer.
-        /// </summary>
-        /// <value>
-        /// The size of the buffer. The default buffer size is 16384 bytes.
-        /// </value>
-        public uint BufferSize { get; set; }
+    public IRemotePathTransformation RemotePathTransformation
+    {
+      get => this._remotePathTransformation;
+      set => this._remotePathTransformation = value != null ? value : throw new ArgumentNullException(nameof (value));
+    }
 
-        /// <summary>
-        /// Gets or sets the transformation to apply to remote paths.
-        /// </summary>
-        /// <value>
-        /// The transformation to apply to remote paths. The default is <see cref="SshNet.RemotePathTransformation.DoubleQuote"/>.
-        /// </value>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is <c>null</c>.</exception>
-        /// <remarks>
-        /// <para>
-        /// This transformation is applied to the remote file or directory path that is passed to the
-        /// <c>scp</c> command.
-        /// </para>
-        /// <para>
-        /// See <see cref="SshNet.RemotePathTransformation"/> for the transformations that are supplied
-        /// out-of-the-box with SSH.NET.
-        /// </para>
-        /// </remarks>
-        public IRemotePathTransformation RemotePathTransformation
+    public event EventHandler<ScpDownloadEventArgs> Downloading;
+
+    public event EventHandler<ScpUploadEventArgs> Uploading;
+
+    public ScpClient(ConnectionInfo connectionInfo)
+      : this(connectionInfo, false)
+    {
+    }
+
+    public ScpClient(string host, int port, string username, string password)
+      : this((ConnectionInfo) new PasswordConnectionInfo(host, port, username, password), true)
+    {
+    }
+
+    public ScpClient(string host, string username, string password)
+      : this(host, ConnectionInfo.DefaultPort, username, password)
+    {
+    }
+
+    public ScpClient(string host, int port, string username, params PrivateKeyFile[] keyFiles)
+      : this((ConnectionInfo) new PrivateKeyConnectionInfo(host, port, username, keyFiles), true)
+    {
+    }
+
+    public ScpClient(string host, string username, params PrivateKeyFile[] keyFiles)
+      : this(host, ConnectionInfo.DefaultPort, username, keyFiles)
+    {
+    }
+
+    private ScpClient(ConnectionInfo connectionInfo, bool ownsConnectionInfo)
+      : this(connectionInfo, ownsConnectionInfo, (IServiceFactory) new ServiceFactory())
+    {
+    }
+
+    internal ScpClient(
+      ConnectionInfo connectionInfo,
+      bool ownsConnectionInfo,
+      IServiceFactory serviceFactory)
+      : base(connectionInfo, ownsConnectionInfo, serviceFactory)
+    {
+      this.OperationTimeout = Session.InfiniteTimeSpan;
+      this.BufferSize = 16384U;
+      this._remotePathTransformation = serviceFactory.CreateRemotePathDoubleQuoteTransformation();
+    }
+
+    public void Upload(Stream source, string path)
+    {
+      using (PipeStream input = this.ServiceFactory.CreatePipeStream())
+      {
+        using (IChannelSession channelSession = this.Session.CreateChannelSession())
         {
-            get { return _remotePathTransformation; }
-            set
+          channelSession.DataReceived += (EventHandler<ChannelDataEventArgs>) ((sender, e) => input.Write(e.Data, 0, e.Data.Length));
+          channelSession.Open();
+          if (!channelSession.SendExecRequest(string.Format("scp -t {0}", (object) this._remotePathTransformation.Transform(path))))
+            throw ScpClient.SecureExecutionRequestRejectedException();
+          this.CheckReturnCode((Stream) input);
+          this.UploadFileModeAndName(channelSession, (Stream) input, source.Length, string.Empty);
+          this.UploadFileContent(channelSession, (Stream) input, source, PosixPath.GetFileName(path));
+        }
+      }
+    }
+
+    public void Download(string filename, Stream destination)
+    {
+      if (filename.IsNullOrWhiteSpace())
+        throw new ArgumentException(nameof (filename));
+      if (destination == null)
+        throw new ArgumentNullException(nameof (destination));
+      using (PipeStream input1 = this.ServiceFactory.CreatePipeStream())
+      {
+        using (IChannelSession channelSession = this.Session.CreateChannelSession())
+        {
+          channelSession.DataReceived += (EventHandler<ChannelDataEventArgs>) ((sender, e) => input1.Write(e.Data, 0, e.Data.Length));
+          channelSession.Open();
+          if (!channelSession.SendExecRequest(string.Format("scp -f {0}", (object) this._remotePathTransformation.Transform(filename))))
+            throw ScpClient.SecureExecutionRequestRejectedException();
+          ScpClient.SendSuccessConfirmation((IChannel) channelSession);
+          string input2 = this.ReadString((Stream) input1);
+          Match match = ScpClient.FileInfoRe.Match(input2);
+          if (match.Success)
+          {
+            ScpClient.SendSuccessConfirmation((IChannel) channelSession);
+            long length = long.Parse(match.Result("${length}"));
+            string filename1 = match.Result("${filename}");
+            this.InternalDownload((IChannel) channelSession, (Stream) input1, destination, filename1, length);
+          }
+          else
+            this.SendErrorConfirmation((IChannel) channelSession, string.Format("\"{0}\" is not valid protocol message.", (object) input2));
+        }
+      }
+    }
+
+    private void UploadFileModeAndName(
+      IChannelSession channel,
+      Stream input,
+      long fileSize,
+      string serverFileName)
+    {
+      this.SendData((IChannel) channel, string.Format("C0644 {0} {1}\n", (object) fileSize, (object) serverFileName));
+      this.CheckReturnCode(input);
+    }
+
+    private void UploadFileContent(
+      IChannelSession channel,
+      Stream input,
+      Stream source,
+      string remoteFileName)
+    {
+      long length1 = source.Length;
+      byte[] buffer = new byte[(int) this.BufferSize];
+      int length2 = source.Read(buffer, 0, buffer.Length);
+      long uploaded = 0;
+      for (; length2 > 0; length2 = source.Read(buffer, 0, buffer.Length))
+      {
+        ScpClient.SendData((IChannel) channel, buffer, length2);
+        uploaded += (long) length2;
+        this.RaiseUploadingEvent(remoteFileName, length1, uploaded);
+      }
+      ScpClient.SendSuccessConfirmation((IChannel) channel);
+      this.CheckReturnCode(input);
+    }
+
+    private void InternalDownload(
+      IChannel channel,
+      Stream input,
+      Stream output,
+      string filename,
+      long length)
+    {
+      byte[] buffer = new byte[Math.Min(length, (long) this.BufferSize)];
+      long val1 = length;
+      do
+      {
+        int count = input.Read(buffer, 0, (int) Math.Min(val1, (long) this.BufferSize));
+        output.Write(buffer, 0, count);
+        this.RaiseDownloadingEvent(filename, length, length - val1);
+        val1 -= (long) count;
+      }
+      while (val1 > 0L);
+      output.Flush();
+      this.RaiseDownloadingEvent(filename, length, length - val1);
+      ScpClient.SendSuccessConfirmation(channel);
+      this.CheckReturnCode(input);
+    }
+
+    private void RaiseDownloadingEvent(string filename, long size, long downloaded)
+    {
+      if (this.Downloading == null)
+        return;
+      this.Downloading((object) this, new ScpDownloadEventArgs(filename, size, downloaded));
+    }
+
+    private void RaiseUploadingEvent(string filename, long size, long uploaded)
+    {
+      if (this.Uploading == null)
+        return;
+      this.Uploading((object) this, new ScpUploadEventArgs(filename, size, uploaded));
+    }
+
+    private static void SendSuccessConfirmation(IChannel channel) => ScpClient.SendData(channel, ScpClient.SuccessConfirmationCode);
+
+    private void SendErrorConfirmation(IChannel channel, string message)
+    {
+      ScpClient.SendData(channel, ScpClient.ErrorConfirmationCode);
+      this.SendData(channel, message + "\n");
+    }
+
+    private void CheckReturnCode(Stream input)
+    {
+      if (ScpClient.ReadByte(input) > 0)
+        throw new ScpException(this.ReadString(input));
+    }
+
+    private void SendData(IChannel channel, string command) => channel.SendData(this.ConnectionInfo.Encoding.GetBytes(command));
+
+    private static void SendData(IChannel channel, byte[] buffer, int length) => channel.SendData(buffer, 0, length);
+
+    private static void SendData(IChannel channel, byte[] buffer) => channel.SendData(buffer);
+
+    private static int ReadByte(Stream stream)
+    {
+      int num = stream.ReadByte();
+      return num != -1 ? num : throw new SshException("Stream has been closed.");
+    }
+
+    private string ReadString(Stream stream)
+    {
+      bool flag = false;
+      List<byte> byteList = new List<byte>();
+      int num = ScpClient.ReadByte(stream);
+      if (num == 1 || num == 2)
+      {
+        flag = true;
+        num = ScpClient.ReadByte(stream);
+      }
+      for (; num != 10; num = ScpClient.ReadByte(stream))
+        byteList.Add((byte) num);
+      byte[] array = byteList.ToArray();
+      if (flag)
+        throw new ScpException(this.ConnectionInfo.Encoding.GetString(array, 0, array.Length));
+      return this.ConnectionInfo.Encoding.GetString(array, 0, array.Length);
+    }
+
+    private static SshException SecureExecutionRequestRejectedException() => throw new SshException("Secure copy execution request was rejected by the server. Please consult the server logs.");
+
+    public void Upload(FileInfo fileInfo, string path)
+    {
+      if (fileInfo == null)
+        throw new ArgumentNullException(nameof (fileInfo));
+      if (string.IsNullOrEmpty(path))
+        throw new ArgumentException(nameof (path));
+      using (PipeStream input = this.ServiceFactory.CreatePipeStream())
+      {
+        using (IChannelSession channelSession = this.Session.CreateChannelSession())
+        {
+          channelSession.DataReceived += (EventHandler<ChannelDataEventArgs>) ((sender, e) => input.Write(e.Data, 0, e.Data.Length));
+          channelSession.Open();
+          if (!channelSession.SendExecRequest(string.Format("scp -t {0}", (object) this._remotePathTransformation.Transform(path))))
+            throw ScpClient.SecureExecutionRequestRejectedException();
+          this.CheckReturnCode((Stream) input);
+          using (FileStream source = fileInfo.OpenRead())
+          {
+            this.UploadTimes(channelSession, (Stream) input, (FileSystemInfo) fileInfo);
+            this.UploadFileModeAndName(channelSession, (Stream) input, source.Length, string.Empty);
+            this.UploadFileContent(channelSession, (Stream) input, (Stream) source, fileInfo.Name);
+          }
+        }
+      }
+    }
+
+    public void Upload(DirectoryInfo directoryInfo, string path)
+    {
+      if (directoryInfo == null)
+        throw new ArgumentNullException(nameof (directoryInfo));
+      if (string.IsNullOrEmpty(path))
+        throw new ArgumentException(nameof (path));
+      using (PipeStream input = this.ServiceFactory.CreatePipeStream())
+      {
+        using (IChannelSession channelSession = this.Session.CreateChannelSession())
+        {
+          channelSession.DataReceived += (EventHandler<ChannelDataEventArgs>) ((sender, e) => input.Write(e.Data, 0, e.Data.Length));
+          channelSession.Open();
+          if (!channelSession.SendExecRequest(string.Format("scp -rt {0}", (object) this._remotePathTransformation.Transform(path))))
+            throw ScpClient.SecureExecutionRequestRejectedException();
+          this.CheckReturnCode((Stream) input);
+          this.UploadTimes(channelSession, (Stream) input, (FileSystemInfo) directoryInfo);
+          this.UploadDirectoryModeAndName(channelSession, (Stream) input, ".");
+          this.UploadDirectoryContent(channelSession, (Stream) input, directoryInfo);
+        }
+      }
+    }
+
+    public void Download(string filename, FileInfo fileInfo)
+    {
+      if (string.IsNullOrEmpty(filename))
+        throw new ArgumentException(nameof (filename));
+      if (fileInfo == null)
+        throw new ArgumentNullException(nameof (fileInfo));
+      using (PipeStream input = this.ServiceFactory.CreatePipeStream())
+      {
+        using (IChannelSession channelSession = this.Session.CreateChannelSession())
+        {
+          channelSession.DataReceived += (EventHandler<ChannelDataEventArgs>) ((sender, e) => input.Write(e.Data, 0, e.Data.Length));
+          channelSession.Open();
+          if (!channelSession.SendExecRequest(string.Format("scp -pf {0}", (object) this._remotePathTransformation.Transform(filename))))
+            throw ScpClient.SecureExecutionRequestRejectedException();
+          ScpClient.SendSuccessConfirmation((IChannel) channelSession);
+          this.InternalDownload(channelSession, (Stream) input, (FileSystemInfo) fileInfo);
+        }
+      }
+    }
+
+    public void Download(string directoryName, DirectoryInfo directoryInfo)
+    {
+      if (string.IsNullOrEmpty(directoryName))
+        throw new ArgumentException(nameof (directoryName));
+      if (directoryInfo == null)
+        throw new ArgumentNullException(nameof (directoryInfo));
+      using (PipeStream input = this.ServiceFactory.CreatePipeStream())
+      {
+        using (IChannelSession channelSession = this.Session.CreateChannelSession())
+        {
+          channelSession.DataReceived += (EventHandler<ChannelDataEventArgs>) ((sender, e) => input.Write(e.Data, 0, e.Data.Length));
+          channelSession.Open();
+          if (!channelSession.SendExecRequest(string.Format("scp -prf {0}", (object) this._remotePathTransformation.Transform(directoryName))))
+            throw ScpClient.SecureExecutionRequestRejectedException();
+          ScpClient.SendSuccessConfirmation((IChannel) channelSession);
+          this.InternalDownload(channelSession, (Stream) input, (FileSystemInfo) directoryInfo);
+        }
+      }
+    }
+
+    private void UploadTimes(IChannelSession channel, Stream input, FileSystemInfo fileOrDirectory)
+    {
+      DateTime dateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+      long totalSeconds1 = (long) (fileOrDirectory.LastWriteTimeUtc - dateTime).TotalSeconds;
+      long totalSeconds2 = (long) (fileOrDirectory.LastAccessTimeUtc - dateTime).TotalSeconds;
+      this.SendData((IChannel) channel, string.Format("T{0} 0 {1} 0\n", (object) totalSeconds1, (object) totalSeconds2));
+      this.CheckReturnCode(input);
+    }
+
+    private void UploadDirectoryContent(
+      IChannelSession channel,
+      Stream input,
+      DirectoryInfo directoryInfo)
+    {
+      foreach (FileInfo file in directoryInfo.GetFiles())
+      {
+        using (FileStream source = file.OpenRead())
+        {
+          this.UploadTimes(channel, input, (FileSystemInfo) file);
+          this.UploadFileModeAndName(channel, input, source.Length, file.Name);
+          this.UploadFileContent(channel, input, (Stream) source, file.Name);
+        }
+      }
+      foreach (DirectoryInfo directory in directoryInfo.GetDirectories())
+      {
+        this.UploadTimes(channel, input, (FileSystemInfo) directory);
+        this.UploadDirectoryModeAndName(channel, input, directory.Name);
+        this.UploadDirectoryContent(channel, input, directory);
+      }
+      this.SendData((IChannel) channel, "E\n");
+      this.CheckReturnCode(input);
+    }
+
+    private void UploadDirectoryModeAndName(
+      IChannelSession channel,
+      Stream input,
+      string directoryName)
+    {
+      this.SendData((IChannel) channel, string.Format("D0755 0 {0}\n", (object) directoryName));
+      this.CheckReturnCode(input);
+    }
+
+    private void InternalDownload(
+      IChannelSession channel,
+      Stream input,
+      FileSystemInfo fileSystemInfo)
+    {
+      DateTime dateTime1 = DateTime.Now;
+      DateTime dateTime2 = DateTime.Now;
+      string fullName = fileSystemInfo.FullName;
+      int num1 = 0;
+      while (true)
+      {
+        string input1;
+        Match match1;
+        do
+        {
+          do
+          {
+            input1 = this.ReadString(input);
+            if (!(input1 == "E"))
             {
-                if (value == null)
-                    throw new ArgumentNullException("value");
-                _remotePathTransformation = value;
-            }
-        }
-
-        /// <summary>
-        /// Occurs when downloading file.
-        /// </summary>
-        public event EventHandler<ScpDownloadEventArgs> Downloading;
-
-        /// <summary>
-        /// Occurs when uploading file.
-        /// </summary>
-        public event EventHandler<ScpUploadEventArgs> Uploading;
-
-        #region Constructors
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SftpClient"/> class.
-        /// </summary>
-        /// <param name="connectionInfo">The connection info.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="connectionInfo"/> is <c>null</c>.</exception>
-        public ScpClient(ConnectionInfo connectionInfo)
-            : this(connectionInfo, false)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SftpClient"/> class.
-        /// </summary>
-        /// <param name="host">Connection host.</param>
-        /// <param name="port">Connection port.</param>
-        /// <param name="username">Authentication username.</param>
-        /// <param name="password">Authentication password.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="password"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="host"/> is invalid, or <paramref name="username"/> is <c>null</c> or contains only whitespace characters.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="port"/> is not within <see cref="IPEndPoint.MinPort"/> and <see cref="IPEndPoint.MaxPort"/>.</exception>
-        [SuppressMessage("Microsoft.Reliability", "CA2000:DisposeObjectsBeforeLosingScope", Justification = "Disposed in Dispose(bool) method.")]
-        public ScpClient(string host, int port, string username, string password)
-            : this(new PasswordConnectionInfo(host, port, username, password), true)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SftpClient"/> class.
-        /// </summary>
-        /// <param name="host">Connection host.</param>
-        /// <param name="username">Authentication username.</param>
-        /// <param name="password">Authentication password.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="password"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="host"/> is invalid, or <paramref name="username"/> is <c>null</c> or contains only whitespace characters.</exception>
-        public ScpClient(string host, string username, string password)
-            : this(host, ConnectionInfo.DefaultPort, username, password)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SftpClient"/> class.
-        /// </summary>
-        /// <param name="host">Connection host.</param>
-        /// <param name="port">Connection port.</param>
-        /// <param name="username">Authentication username.</param>
-        /// <param name="keyFiles">Authentication private key file(s) .</param>
-        /// <exception cref="ArgumentNullException"><paramref name="keyFiles"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="host"/> is invalid, -or- <paramref name="username"/> is <c>null</c> or contains only whitespace characters.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="port"/> is not within <see cref="IPEndPoint.MinPort"/> and <see cref="IPEndPoint.MaxPort"/>.</exception>
-        [SuppressMessage("Microsoft.Reliability", "CA2000:DisposeObjectsBeforeLosingScope", Justification = "Disposed in Dispose(bool) method.")]
-        public ScpClient(string host, int port, string username, params PrivateKeyFile[] keyFiles)
-            : this(new PrivateKeyConnectionInfo(host, port, username, keyFiles), true)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SftpClient"/> class.
-        /// </summary>
-        /// <param name="host">Connection host.</param>
-        /// <param name="username">Authentication username.</param>
-        /// <param name="keyFiles">Authentication private key file(s) .</param>
-        /// <exception cref="ArgumentNullException"><paramref name="keyFiles"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="host"/> is invalid, -or- <paramref name="username"/> is <c>null</c> or contains only whitespace characters.</exception>
-        public ScpClient(string host, string username, params PrivateKeyFile[] keyFiles)
-            : this(host, ConnectionInfo.DefaultPort, username, keyFiles)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ScpClient"/> class.
-        /// </summary>
-        /// <param name="connectionInfo">The connection info.</param>
-        /// <param name="ownsConnectionInfo">Specified whether this instance owns the connection info.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="connectionInfo"/> is <c>null</c>.</exception>
-        /// <remarks>
-        /// If <paramref name="ownsConnectionInfo"/> is <c>true</c>, then the
-        /// connection info will be disposed when this instance is disposed.
-        /// </remarks>
-        private ScpClient(ConnectionInfo connectionInfo, bool ownsConnectionInfo)
-            : this(connectionInfo, ownsConnectionInfo, new ServiceFactory())
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ScpClient"/> class.
-        /// </summary>
-        /// <param name="connectionInfo">The connection info.</param>
-        /// <param name="ownsConnectionInfo">Specified whether this instance owns the connection info.</param>
-        /// <param name="serviceFactory">The factory to use for creating new services.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="connectionInfo"/> is <c>null</c>.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="serviceFactory"/> is <c>null</c>.</exception>
-        /// <remarks>
-        /// If <paramref name="ownsConnectionInfo"/> is <c>true</c>, then the
-        /// connection info will be disposed when this instance is disposed.
-        /// </remarks>
-        internal ScpClient(ConnectionInfo connectionInfo, bool ownsConnectionInfo, IServiceFactory serviceFactory)
-            : base(connectionInfo, ownsConnectionInfo, serviceFactory)
-        {
-            OperationTimeout = SshNet.Session.InfiniteTimeSpan;
-            BufferSize = 1024 * 16;
-            _remotePathTransformation = serviceFactory.CreateRemotePathDoubleQuoteTransformation();
-        }
-
-        #endregion
-
-        /// <summary>
-        /// Uploads the specified stream to the remote host.
-        /// </summary>
-        /// <param name="source">The <see cref="Stream"/> to upload.</param>
-        /// <param name="path">A relative or absolute path for the remote file.</param>
-        /// <exception cref="ScpException">A directory with the specified path exists on the remote host.</exception>
-        /// <exception cref="SshException">The secure copy execution request was rejected by the server.</exception>
-        public void Upload(Stream source, string path)
-        {
-            using (var input = ServiceFactory.CreatePipeStream())
-            using (var channel = Session.CreateChannelSession())
-            {
-                channel.DataReceived += (sender, e) => input.Write(e.Data, 0, e.Data.Length);
-                channel.Open();
-
-                // pass the full path to ensure the server does not create the directory part
-                // as a file in case the directory does not exist
-                if (!channel.SendExecRequest(string.Format("scp -t {0}", _remotePathTransformation.Transform(path))))
+              match1 = ScpClient.DirectoryInfoRe.Match(input1);
+              if (!match1.Success)
+              {
+                Match match2 = ScpClient.FileInfoRe.Match(input1);
+                if (match2.Success)
                 {
-                    throw SecureExecutionRequestRejectedException();
-                }
-                CheckReturnCode(input);
-
-                // specify a zero-length file name to avoid creating a file with absolute
-                // path '<path>/<filename part of path>' if directory '<path>' already exists
-                UploadFileModeAndName(channel, input, source.Length, string.Empty);
-                UploadFileContent(channel, input, source, PosixPath.GetFileName(path));
-            }
-        }
-
-        /// <summary>
-        /// Downloads the specified file from the remote host to the stream.
-        /// </summary>
-        /// <param name="filename">A relative or absolute path for the remote file.</param>
-        /// <param name="destination">The <see cref="Stream"/> to download the remote file to.</param>
-        /// <exception cref="ArgumentException"><paramref name="filename"/> is <c>null</c> or contains only whitespace characters.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="destination"/> is <c>null</c>.</exception>
-        /// <exception cref="ScpException"><paramref name="filename"/> exists on the remote host, and is not a regular file.</exception>
-        /// <exception cref="SshException">The secure copy execution request was rejected by the server.</exception>
-        public void Download(string filename, Stream destination)
-        {
-            if (filename.IsNullOrWhiteSpace())
-                throw new ArgumentException("filename");
-
-            if (destination == null)
-                throw new ArgumentNullException("destination");
-
-            using (var input = ServiceFactory.CreatePipeStream())
-            using (var channel = Session.CreateChannelSession())
-            {
-                channel.DataReceived += (sender, e) => input.Write(e.Data, 0, e.Data.Length);
-                channel.Open();
-
-                //  Send channel command request
-                if (!channel.SendExecRequest(string.Format("scp -f {0}", _remotePathTransformation.Transform(filename))))
-                {
-                    throw SecureExecutionRequestRejectedException();
-                }
-                SendSuccessConfirmation(channel); //  Send reply
-
-                var message = ReadString(input);
-                var match = FileInfoRe.Match(message);
-
-                if (match.Success)
-                {
-                    //  Read file
-                    SendSuccessConfirmation(channel); //  Send reply
-
-                    var length = long.Parse(match.Result("${length}"));
-                    var fileName = match.Result("${filename}");
-
-                    InternalDownload(channel, input, destination, fileName, length);
+                  ScpClient.SendSuccessConfirmation((IChannel) channel);
+                  long length = long.Parse(match2.Result("${length}"));
+                  string str = match2.Result("${filename}");
+                  if (!(fileSystemInfo is FileInfo fileInfo))
+                    fileInfo = new FileInfo(Path.Combine(fullName, str));
+                  using (FileStream output = fileInfo.OpenWrite())
+                    this.InternalDownload((IChannel) channel, input, (Stream) output, str, length);
+                  fileInfo.LastAccessTime = dateTime2;
+                  fileInfo.LastWriteTime = dateTime1;
                 }
                 else
-                {
-                    SendErrorConfirmation(channel, string.Format("\"{0}\" is not valid protocol message.", message));
-                }
+                  goto label_18;
+              }
+              else
+                goto label_3;
             }
+            else
+              goto label_1;
+          }
+          while (num1 != 0);
+          goto label_16;
+label_1:
+          ScpClient.SendSuccessConfirmation((IChannel) channel);
+          --num1;
+          fullName = new DirectoryInfo(fullName).Parent.FullName;
         }
-
-        /// <summary>
-        /// Sets mode, size and name of file being upload.
-        /// </summary>
-        /// <param name="channel">The channel to perform the upload in.</param>
-        /// <param name="input">A <see cref="Stream"/> from which any feedback from the server can be read.</param>
-        /// <param name="fileSize">The size of the content to upload.</param>
-        /// <param name="serverFileName">The name of the file, without path, to which the content is to be uploaded.</param>
-        /// <remarks>
-        /// <para>
-        /// When the SCP transfer is already initiated for a file, a zero-length <see cref="string"/> should
-        /// be specified for <paramref name="serverFileName"/>. This prevents the server from uploading the
-        /// content to a file with path <c>&lt;file path&gt;/<paramref name="serverFileName"/></c> if there's
-        /// already a directory with this path, and allows us to receive an error response.
-        /// </para>
-        /// </remarks>
-        private void UploadFileModeAndName(IChannelSession channel, Stream input, long fileSize, string serverFileName)
+        while (num1 != 0);
+        break;
+label_3:
+        ScpClient.SendSuccessConfirmation((IChannel) channel);
+        string path2 = match1.Result("${filename}");
+        DirectoryInfo directoryInfo;
+        if (num1 > 0)
         {
-            SendData(channel, string.Format("C0644 {0} {1}\n", fileSize, serverFileName));
-            CheckReturnCode(input);
+          directoryInfo = Directory.CreateDirectory(Path.Combine(fullName, path2));
+          directoryInfo.LastAccessTime = dateTime2;
+          directoryInfo.LastWriteTime = dateTime1;
         }
-
-        /// <summary>
-        /// Uploads the content of a file.
-        /// </summary>
-        /// <param name="channel">The channel to perform the upload in.</param>
-        /// <param name="input">A <see cref="Stream"/> from which any feedback from the server can be read.</param>
-        /// <param name="source">The content to upload.</param>
-        /// <param name="remoteFileName">The name of the remote file, without path, to which the content is uploaded.</param>
-        /// <remarks>
-        /// <paramref name="remoteFileName"/> is only used for raising the <see cref="Uploading"/> event.
-        /// </remarks>
-        private void UploadFileContent(IChannelSession channel, Stream input, Stream source, string remoteFileName)
+        else
+          directoryInfo = fileSystemInfo as DirectoryInfo;
+        ++num1;
+        fullName = directoryInfo.FullName;
+        continue;
+label_18:
+        Match match3 = ScpClient.TimestampRe.Match(input1);
+        if (match3.Success)
         {
-            var totalLength = source.Length;
-            var buffer = new byte[BufferSize];
-
-            var read = source.Read(buffer, 0, buffer.Length);
-
-            long totalRead = 0;
-
-            while (read > 0)
-            {
-                SendData(channel, buffer, read);
-
-                totalRead += read;
-
-                RaiseUploadingEvent(remoteFileName, totalLength, totalRead);
-
-                read = source.Read(buffer, 0, buffer.Length);
-            }
-
-            SendSuccessConfirmation(channel);
-            CheckReturnCode(input);
+          ScpClient.SendSuccessConfirmation((IChannel) channel);
+          long num2 = long.Parse(match3.Result("${mtime}"));
+          long num3 = long.Parse(match3.Result("${atime}"));
+          DateTime dateTime3 = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+          dateTime1 = dateTime3.AddSeconds((double) num2);
+          dateTime2 = dateTime3.AddSeconds((double) num3);
         }
-
-        private void InternalDownload(IChannel channel, Stream input, Stream output, string filename, long length)
-        {
-            var buffer = new byte[Math.Min(length, BufferSize)];
-            var needToRead = length;
-
-            do
-            {
-                var read = input.Read(buffer, 0, (int) Math.Min(needToRead, BufferSize));
-
-                output.Write(buffer, 0, read);
-
-                RaiseDownloadingEvent(filename, length, length - needToRead);
-
-                needToRead -= read;
-            }
-            while (needToRead > 0);
-
-            output.Flush();
-
-            //  Raise one more time when file downloaded
-            RaiseDownloadingEvent(filename, length, length - needToRead);
-
-            //  Send confirmation byte after last data byte was read
-            SendSuccessConfirmation(channel);
-
-            CheckReturnCode(input);
-        }
-
-        private void RaiseDownloadingEvent(string filename, long size, long downloaded)
-        {
-            if (Downloading != null)
-            {
-                Downloading(this, new ScpDownloadEventArgs(filename, size, downloaded));
-            }
-        }
-
-        private void RaiseUploadingEvent(string filename, long size, long uploaded)
-        {
-            if (Uploading != null)
-            {
-                Uploading(this, new ScpUploadEventArgs(filename, size, uploaded));
-            }
-        }
-
-        private static void SendSuccessConfirmation(IChannel channel)
-        {
-            SendData(channel, SuccessConfirmationCode);
-        }
-
-        private void SendErrorConfirmation(IChannel channel, string message)
-        {
-            SendData(channel, ErrorConfirmationCode);
-            SendData(channel, string.Concat(message, "\n"));
-        }
-
-        /// <summary>
-        /// Checks the return code.
-        /// </summary>
-        /// <param name="input">The output stream.</param>
-        private void CheckReturnCode(Stream input)
-        {
-            var b = ReadByte(input);
-
-            if (b > 0)
-            {
-                var errorText = ReadString(input);
-
-                throw new ScpException(errorText);
-            }
-        }
-
-        private void SendData(IChannel channel, string command)
-        {
-            channel.SendData(ConnectionInfo.Encoding.GetBytes(command));
-        }
-
-        private static void SendData(IChannel channel, byte[] buffer, int length)
-        {
-            channel.SendData(buffer, 0, length);
-        }
-
-        private static void SendData(IChannel channel, byte[] buffer)
-        {
-            channel.SendData(buffer);
-        }
-
-        private static int ReadByte(Stream stream)
-        {
-            var b = stream.ReadByte();
-            if (b == -1)
-                throw new SshException("Stream has been closed.");
-            return b;
-        }
-
-        /// <summary>
-        /// Read a LF-terminated string from the <see cref="Stream"/>.
-        /// </summary>
-        /// <param name="stream">The <see cref="Stream"/> to read from.</param>
-        /// <returns>
-        /// The string without trailing LF.
-        /// </returns>
-        private string ReadString(Stream stream)
-        {
-            var hasError = false;
-
-            var buffer = new List<byte>();
-
-            var b = ReadByte(stream);
-            if (b == 1 || b == 2)
-            {
-                hasError = true;
-                b = ReadByte(stream);
-            }
-
-            while (b != SshNet.Session.LineFeed)
-            {
-                buffer.Add((byte) b);
-                b = ReadByte(stream);
-            }
-
-            var readBytes = buffer.ToArray();
-
-            if (hasError)
-                throw new ScpException(ConnectionInfo.Encoding.GetString(readBytes, 0, readBytes.Length));
-            return ConnectionInfo.Encoding.GetString(readBytes, 0, readBytes.Length);
-        }
-
-        private static SshException SecureExecutionRequestRejectedException()
-        {
-            throw new SshException("Secure copy execution request was rejected by the server. Please consult the server logs.");
-        }
+        else
+          this.SendErrorConfirmation((IChannel) channel, string.Format("\"{0}\" is not valid protocol message.", (object) input1));
+      }
+      return;
+label_16:;
     }
+  }
 }
